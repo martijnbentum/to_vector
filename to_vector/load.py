@@ -1,3 +1,5 @@
+from decouple import config
+from huggingface_hub import login
 import librosa
 import os
 import torch
@@ -6,11 +8,17 @@ from transformers import AutoProcessor
 from transformers import AutoModel
 from transformers import AutoModelForPreTraining
 
+token = config('HF_TOKEN', default= None)
+default_cache_directory = config('HF_HOME', default= '~/.cache/huggingface')
+if default_cache_directory.startswith('~'):
+    default_cache_directory = os.path.expanduser(default_cache_directory)
+if token: login(token)
+else: print('No Hugging Face token found. Set it in .env file under HF_TOKEN')
+
 wav2vec2_base= 'facebook/wav2vec2-base'
 hubert_base = 'facebook/hubert-base-ls960'
 wavlm_base = 'microsoft/wavlm-base-plus'
 default_checkpoint = wav2vec2_base
-default_cache_directory = None
 
 def load_audio(filename, start = 0.0, end=None):
 	if not end: duration = None
