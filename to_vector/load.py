@@ -27,16 +27,18 @@ def load_audio(filename, start = 0.0, end=None):
         duration=duration)
 	return audio
 
-def load_processor(model_name_or_path):
+def load_processor(model_name_or_path = None):
     '''Load a processor. 
     model_name_or_path      Hugging Face repo id or local path
     '''
+    if model_name_or_path is None: model_name_or_path = default_checkpoint
     return AutoProcessor.from_pretrained(model_name_or_path)
 
-def load_feature_extractor(model_name_or_path):
+def load_feature_extractor(model_name_or_path = None):
     '''Load feature extractor.
     model_name_or_path      Hugging Face repo id or local path
     '''
+    if model_name_or_path is None: model_name_or_path = default_checkpoint
     return AutoFeatureExtractor.from_pretrained(model_name_or_path) 
 
 def load_pretrained_model(model_name_or_path = None, cache_directory = None, 
@@ -59,4 +61,72 @@ def load_hubert_base_model(cache_directory = None, gpu = False):
 
 def load_wav2vec2_base_model(cache_directory = None, gpu = False):
     return load_pretrained_model(wav2vec2_base, cache_directory, gpu)
+
+
+def handle_model_feature_extractor(model, feature_extractor, gpu):
+    '''Handle the loading of the model and feature extractor based on the inputs.
+    model            A pretrained model or a string representing the model name.
+    feature_extractor A feature extractor or None.
+    gpu              If True, the model will be moved to GPU if available.
+    '''
+    if type(model) == str: model_name = model
+    else: model_name = None
+    if feature_extractor is None and model is None:
+        feature_extractor = load_feature_extractor()
+    elif feature_extractor is None and model_name:
+        feature_extractor = load_feature_extractor(model)
+    if feature_extractor.feature_extractor_type != 'Wav2Vec2FeatureExtractor':
+        m = f'WARNING: Feature extractor {type(feature_extractor)} '
+        m += 'may not be supported. A Wav2Vec2FeatureExtractor is expected.'
+        print(m)
+    if model is None: model = load_pretrained_model(gpu = gpu)
+    elif model_name:    
+        model = load_pretrained_model(model_name, gpu = gpu)
+    if model not in utils.supported_models:
+        models = '\n'.join(['\t' + str(x) for x in utils.supported_models])
+        m = f'WARNING: Model {type(model)} may not be supported. '
+        m += 'Make sure it is one of the supported models: \n'
+        m += f'{models}'
+        print(m)
+    move_model(model, gpu)
+    return model, feature_extractor
+
+def model_device(model):
+    '''Get the device of the model.'''
+    return next(model.parameters()).device
+
+def model_is_on_gpu(model):
+    '''Check if the model is on GPU.'''
+    return model_device(model).type == 'cuda'
+
+def model_is_on_cpu(model):
+    '''Check if the model is on CPU.'''
+    return model_device(model).type == 'cpu'
+
+def move_model_to_gpu(model):
+    '''Move the model to GPU if available.'''
+    m =f'No GPU available. Model {model.base_model_prefix} will remain on CPU.'
+    if model_is_on_gpu(model):
+        print('Model is already on GPU.')
+        return model
+    if torch.cuda.is_available():
+        print(f'Moving model {model.base_model_prefix} to GPU.')
+        model.to('cuda')
+    else: print('WARNING:',m)
+    return model
+
+def move_model_to_cpu(model):
+    '''Move the model to CPU.'''
+    if model_is_on_cpu(model):
+        print('Model is already on CPU.')
+        return model
+    print(f'Moving model {model.base_model_prefix} to CPU.')
+    model.to('cpu')
+    return model
+
+def move_model(model, gpu = False):
+    '''Move the model to GPU if gpu is True, otherwise move it to CPU.'''
+    if gpu: return move_model_to_gpu(model)
+    else: return move_model_to_cpu(model)
+    
 
