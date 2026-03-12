@@ -5,6 +5,10 @@ __pycache__/
 
 .env
 
+#vim
+*.swp
+*.swo
+
 # C extensions
 *.so
 
