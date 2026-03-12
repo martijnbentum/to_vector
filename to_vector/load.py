@@ -7,19 +7,24 @@ from transformers import AutoFeatureExtractor
 from transformers import AutoProcessor
 from transformers import AutoModel
 from transformers import AutoModelForPreTraining
-from . import utils
+from . import model_registry
 
-token = config('HF_TOKEN', default= None)
-default_cache_directory = config('HF_HOME', default= '~/.cache/huggingface')
+default_cache_directory = config('HF_HOME', default='~/.cache/huggingface')
 if default_cache_directory.startswith('~'):
     default_cache_directory = os.path.expanduser(default_cache_directory)
-if token: login(token)
-else: print('No Hugging Face token found. Set it in .env file under HF_TOKEN')
 
 wav2vec2_base= 'facebook/wav2vec2-base'
 hubert_base = 'facebook/hubert-base-ls960'
 wavlm_base = 'microsoft/wavlm-base-plus'
 default_checkpoint = wav2vec2_base
+
+
+def login_huggingface(token=None):
+    '''Login to Hugging Face if a token is configured or provided.'''
+    if token is None: token = config('HF_TOKEN', default=None)
+    if not token: return False
+    login(token)
+    return True
 
 def load_audio(filename, start = 0.0, end=None):
 	if not end: duration = None
@@ -116,15 +121,16 @@ def handle_model_feature_extractor(model, feature_extractor, gpu,
     if feature_extractor is None:
         feature_extractor = load_feature_extractor()
     d = feature_extractor.to_dict()
-    if d['feature_extractor_type'] != 'Wav2Vec2FeatureExtractor':
+    if d.get('feature_extractor_type') != 'Wav2Vec2FeatureExtractor':
         m = f'WARNING: Feature extractor {type(feature_extractor)} '
         m += 'may not be supported. A Wav2Vec2FeatureExtractor is expected.'
         print(m)
     if model is None: model = load_pretrained_model(gpu = gpu)
     elif model_name:    
         model = load_pretrained_model(model_name, gpu = gpu)
-    if model not in utils.supported_models:
-        models = '\n'.join(['\t' + str(x) for x in utils.supported_models])
+    if not model_registry.is_supported_model(model):
+        smt = model_registry.SUPPORTED_MODEL_TYPES
+        models = '\n'.join(['\t' + str(x) for x in smt])
         m = f'WARNING: Model {type(model)} may not be supported. '
         m += 'Make sure it is one of the supported models: \n'
         m += f'{models}'
