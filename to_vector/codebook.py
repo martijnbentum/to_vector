@@ -1,4 +1,3 @@
-import torch
 from . import load
 from . import to_embeddings
 import numpy as np
@@ -49,6 +48,8 @@ def audio_to_codevectors(audio, model_pt = None, feature_extractor = None,
     feature_extractor is the feature extractor to use
     gpu             whether to use gpu or not
     '''
+    if model_pt is None:
+        model_pt = load.load_model_pt(gpu=gpu)
     cnn = to_embeddings.audio_to_cnn(audio, model_pt, feature_extractor, gpu)
     return cnn_output_to_codevectors(cnn, model_pt)
 
@@ -60,6 +61,8 @@ def audio_to_codebook_indices(audio, model_pt = None, feature_extractor = None,
     feature_extractor is the feature extractor to use
     gpu             whether to use gpu or not
     '''
+    if model_pt is None:
+        model_pt = load.load_model_pt(gpu=gpu)
     codevectors = audio_to_codevectors(audio, model_pt, feature_extractor, gpu)
     codebook = load_codebook(model_pt)
     codebook_indices = codevectors_to_codebook_indices(codevectors, codebook)
@@ -186,4 +189,3 @@ def get_row_index_of_vector_in_matrix(vector, matrix):
     matrix  is the matrix to search for the vector
     '''
     return np.argwhere((vector == matrix).all(1)).flatten()[0]
-
