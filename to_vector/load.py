@@ -7,6 +7,7 @@ from transformers import AutoFeatureExtractor
 from transformers import AutoProcessor
 from transformers import AutoModel
 from transformers import AutoModelForPreTraining
+from . import utils
 
 token = config('HF_TOKEN', default= None)
 default_cache_directory = config('HF_HOME', default= '~/.cache/huggingface')
@@ -52,7 +53,7 @@ def load_pretrained_model(model_name_or_path = None, cache_directory = None,
 
 def load_model_pt(checkpoint = None, gpu = False):
     if not checkpoint: checkpoint = default_checkpoint
-    model_pt = pt.from_pretrained(checkpoint)
+    model_pt = AutoModelForPreTraining.from_pretrained(checkpoint)
     if gpu: model_pt.to('cuda')
     return model_pt
 
@@ -61,35 +62,6 @@ def load_hubert_base_model(cache_directory = None, gpu = False):
 
 def load_wav2vec2_base_model(cache_directory = None, gpu = False):
     return load_pretrained_model(wav2vec2_base, cache_directory, gpu)
-
-
-def handle_model_feature_extractor(model, feature_extractor, gpu):
-    '''Handle the loading of the model and feature extractor based on the inputs.
-    model            A pretrained model or a string representing the model name.
-    feature_extractor A feature extractor or None.
-    gpu              If True, the model will be moved to GPU if available.
-    '''
-    if type(model) == str: model_name = model
-    else: model_name = None
-    if feature_extractor is None and model is None:
-        feature_extractor = load_feature_extractor()
-    elif feature_extractor is None and model_name:
-        feature_extractor = load_feature_extractor(model)
-    if feature_extractor.feature_extractor_type != 'Wav2Vec2FeatureExtractor':
-        m = f'WARNING: Feature extractor {type(feature_extractor)} '
-        m += 'may not be supported. A Wav2Vec2FeatureExtractor is expected.'
-        print(m)
-    if model is None: model = load_pretrained_model(gpu = gpu)
-    elif model_name:    
-        model = load_pretrained_model(model_name, gpu = gpu)
-    if model not in utils.supported_models:
-        models = '\n'.join(['\t' + str(x) for x in utils.supported_models])
-        m = f'WARNING: Model {type(model)} may not be supported. '
-        m += 'Make sure it is one of the supported models: \n'
-        m += f'{models}'
-        print(m)
-    move_model(model, gpu)
-    return model, feature_extractor
 
 def model_device(model):
     '''Get the device of the model.'''
@@ -130,3 +102,33 @@ def move_model(model, gpu = False):
     else: return move_model_to_cpu(model)
     
 
+def handle_model_feature_extractor(model, feature_extractor, gpu,
+    do_move_model = False):
+    '''Handle the loading of the model and feature extractor based on the inputs.
+    model            A pretrained model or a string representing the model name.
+    feature_extractor A feature extractor or None.
+    gpu              If True, the model will be moved to GPU if available.
+    '''
+    if type(model) == str: model_name = model
+    else: model_name = None
+    if feature_extractor is None and model_name:
+        feature_extractor = load_feature_extractor(model)
+    if feature_extractor is None:
+        feature_extractor = load_feature_extractor()
+    d = feature_extractor.to_dict()
+    if d['feature_extractor_type'] != 'Wav2Vec2FeatureExtractor':
+        m = f'WARNING: Feature extractor {type(feature_extractor)} '
+        m += 'may not be supported. A Wav2Vec2FeatureExtractor is expected.'
+        print(m)
+    if model is None: model = load_pretrained_model(gpu = gpu)
+    elif model_name:    
+        model = load_pretrained_model(model_name, gpu = gpu)
+    if model not in utils.supported_models:
+        models = '\n'.join(['\t' + str(x) for x in utils.supported_models])
+        m = f'WARNING: Model {type(model)} may not be supported. '
+        m += 'Make sure it is one of the supported models: \n'
+        m += f'{models}'
+        print(m)
+    if do_move_model: move_model(model, gpu)
+    gpu = model_is_on_gpu(model)
+    return model, feature_extractor, gpu
