@@ -2,7 +2,6 @@ from . import load
 from pathlib import Path
 import torch
 from transformers.modeling_outputs import BaseModelOutput
-from . import utils
 
 def audio_to_vector(audio_array, model = None, feature_extractor = None,
     gpu = False, numpify_output = True):
@@ -28,9 +27,11 @@ def audio_to_vector(audio_array, model = None, feature_extractor = None,
         outputs = model(**inputs,output_hidden_states = True)
     if not hasattr(outputs, 'extract_features'):
         if 'Hubert' in str(type(model)):
-            o = audio_to_cnn(audio, model, feature_extractor, gpu)
+            o = audio_to_cnn(audio_array, model, feature_extractor, gpu)
             outputs.extract_features = o
-    return numpify(outputs)
+    if numpify_output:
+        return numpify(outputs)
+    return outputs
 
 def filename_to_vector(audio_filename, start=0.0, end=None,
     model=None, feature_extractor = None, gpu = False,
@@ -112,7 +113,7 @@ def audio_to_cnn(audio, model=None, feature_extractor = None,
 
 def filename_to_cnn(audio_filename, start=0.0, end=None,
     model=None, feature_extractor = None, gpu = False,
-        identifier = '', name = '', numpify_output = True):
+        identifier = '', name = ''):
     '''Convert an audio file to features using a pretrained model.
     audio_filename         Path to the audio file.
     start                  Start time in seconds. Default is 0.0.
@@ -124,7 +125,6 @@ def filename_to_cnn(audio_filename, start=0.0, end=None,
                            GPU if available.
     identifier             An optional identifier to add to the output.
     name                   An optional name to add to the output.
-    numpify_output         If True, the output will be converted to numpy arrays.
     '''
     audio_filename = Path(audio_filename).resolve()
     array = load.load_audio(audio_filename,start, end)
@@ -134,7 +134,6 @@ def filename_to_cnn(audio_filename, start=0.0, end=None,
     o.extract_features = outputs
     outputs = add_info(o, audio_filename, start, end, identifier, name)
     return outputs
-
 
 
 
