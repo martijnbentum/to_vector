@@ -1,8 +1,8 @@
 from . import load
-import torch
 from pathlib import Path
+import torch
 from transformers.modeling_outputs import BaseModelOutput
-import utils
+from . import utils
 
 def audio_to_vector(audio_array, model = None, feature_extractor = None,
     gpu = False, numpify_output = True):
@@ -19,7 +19,7 @@ def audio_to_vector(audio_array, model = None, feature_extractor = None,
                            GPU if available.
     numpify_output         If True, the output will be converted to numpy arrays.
     '''
-    model, feature_extractor = load.handle_model_feature_extractor(model, 
+    model, feature_extractor, gpu = load.handle_model_feature_extractor(model, 
         feature_extractor, gpu)
     inputs = feature_extractor(audio_array, sampling_rate=16_000, 
         return_tensors='pt', padding= True)
@@ -28,7 +28,7 @@ def audio_to_vector(audio_array, model = None, feature_extractor = None,
         outputs = model(**inputs,output_hidden_states = True)
     if not hasattr(outputs, 'extract_features'):
         if 'Hubert' in str(type(model)):
-            o = audio_to_features(audio, model, feature_extractor, gpu)
+            o = audio_to_cnn(audio, model, feature_extractor, gpu)
             outputs.extract_features = o
     return numpify(outputs)
 
@@ -83,7 +83,7 @@ def numpify(outputs):
     outputs.hidden_states = hs
     return outputs
 
-def audio_to_features(audio, model=None, feature_extractor = None,
+def audio_to_cnn(audio, model=None, feature_extractor = None,
     gpu = False, identifier = '', name = ''):
     '''Convert an audio array to features using a pretrained model.
     model                A pretrained model. If None, the default model
@@ -95,7 +95,7 @@ def audio_to_features(audio, model=None, feature_extractor = None,
     identifier           An optional identifier to add to the output.
     name                 An optional name to add to the output.
     '''
-    model, feature_extractor = load.handle_model_feature_extractor(model, 
+    model, feature_extractor, gpu = load.handle_model_feature_extractor(model, 
         feature_extractor, gpu)
     array = audio
     inputs = feature_extractor(array, sampling_rate=16_000, return_tensors='pt',
@@ -103,11 +103,14 @@ def audio_to_features(audio, model=None, feature_extractor = None,
     if gpu:inputs = inputs.to('cuda')
     with torch.no_grad():
         input_values = inputs['input_values']
-        outputs = model.feature_extractor(input_values)
+        if 'ForPreTraining' in str(type(model)):
+            outputs = model.wav2vec2.feature_extractor(input_values)
+        else:
+            outputs = model.feature_extractor(input_values)
     outputs = outputs.transpose(1,2).detach().cpu().numpy()
     return outputs
 
-def filename_to_features(audio_filename, start=0.0, end=None,
+def filename_to_cnn(audio_filename, start=0.0, end=None,
     model=None, feature_extractor = None, gpu = False,
         identifier = '', name = '', numpify_output = True):
     '''Convert an audio file to features using a pretrained model.
@@ -125,10 +128,14 @@ def filename_to_features(audio_filename, start=0.0, end=None,
     '''
     audio_filename = Path(audio_filename).resolve()
     array = load.load_audio(audio_filename,start, end)
-    outputs = audio_to_features(array, model, feature_extractor, gpu,
+    outputs = audio_to_cnn(array, model, feature_extractor, gpu,
         identifier, name)
     o = BaseModelOutput(hidden_states = None)
     o.extract_features = outputs
     outputs = add_info(o, audio_filename, start, end, identifier, name)
     return outputs
+
+
+
+
 
