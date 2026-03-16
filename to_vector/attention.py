@@ -1,6 +1,7 @@
 from pathlib import Path
 import torch
 from . import load
+from transformers.modeling_outputs import BaseModelOutput
 
 
 def audio_to_attention(audio_array, model, feature_extractor = None,
@@ -27,7 +28,10 @@ def audio_to_attention(audio_array, model, feature_extractor = None,
     attention = outputs_to_attention(outputs, layer, head, average_heads,
         numpify_output = False)
     if numpify_output: attention = attention.detach().cpu().numpy()
-    return attention
+    outputs = BaseModelOutput(hidden_states = None)
+    outputs.extract_features = None
+    outputs.attentions = attention
+    return outputs
 
 
 def filename_to_attention(audio_filename, start = 0.0, end = None,
@@ -49,7 +53,7 @@ def filename_to_attention(audio_filename, start = 0.0, end = None,
     '''
     audio_filename = Path(audio_filename).resolve()
     array = load.load_audio(audio_filename, start, end)
-    return extract_attention(array, model, feature_extractor, gpu,
+    return audio_to_attention(array, model, feature_extractor, gpu,
         numpify_output, layer, head, average_heads)
 
 
