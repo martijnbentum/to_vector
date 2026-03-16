@@ -2,6 +2,7 @@ from decouple import config
 from huggingface_hub import login
 import librosa
 import os
+from pathlib import Path
 import torch
 from transformers import AutoFeatureExtractor
 from transformers import AutoProcessor
@@ -27,11 +28,15 @@ def login_huggingface(token=None):
     return True
 
 def load_audio(filename, start = 0.0, end=None):
-	if not end: duration = None
-	else: duration = end - start
-	audio, sr = librosa.load(filename, sr = 16000, offset=start, 
+    if end is None:
+        duration = None
+    else:
+        if end < start:
+            raise ValueError('end must be greater than or equal to start')
+        duration = end - start
+    audio, sr = librosa.load(filename, sr = 16000, offset=start,
         duration=duration)
-	return audio
+    return audio
 
 def load_processor(model_name_or_path = None):
     '''Load a processor. 
@@ -53,13 +58,13 @@ def load_pretrained_model(model_name_or_path = None, cache_directory = None,
     if not cache_directory: cache_directory = default_cache_directory
     model = AutoModel.from_pretrained(model_name_or_path,
         cache_dir = cache_directory)
-    if gpu: model.to('cuda')
+    if gpu: model = move_model_to_gpu(model)
     return model
 
 def load_model_pt(checkpoint = None, gpu = False):
     if not checkpoint: checkpoint = default_checkpoint
     model_pt = AutoModelForPreTraining.from_pretrained(checkpoint)
-    if gpu: model_pt.to('cuda')
+    if gpu: model_pt = move_model_to_gpu(model_pt)
     return model_pt
 
 def load_model_for_attention_extraction(model_name_or_path = None, 
@@ -74,7 +79,7 @@ def load_model_for_attention_extraction(model_name_or_path = None,
     if not cache_directory: cache_directory = default_cache_directory
     model = AutoModel.from_pretrained(model_name_or_path, 
         cache_dir = cache_directory, attn_implementation = 'eager')
-    if gpu: model.to('cuda')
+    if gpu: model = move_model_to_gpu(model)
     return model
 
 def load_hubert_base_model(cache_directory = None, gpu = False):
@@ -132,12 +137,23 @@ def handle_model_feature_extractor(model, feature_extractor, gpu,
                      current device of the model. 
     cache_directory   Directory to cache the model if it needs to be loaded.
     '''
-    if type(model) == str: model_name = model
-    else: model_name = None
+    if isinstance(model, str):
+        model_name = model
+    else:
+        model_name = None
     if feature_extractor is None and model_name:
         feature_extractor = load_feature_extractor(model)
     if feature_extractor is None:
-        feature_extractor = load_feature_extractor()
+        if model_name is None and model is not None:
+            model_name_or_path = getattr(model, 'name_or_path', None)
+            if model_name_or_path and Path(model_name_or_path).exists():
+                feature_extractor = load_feature_extractor(model_name_or_path)
+            elif model_name_or_path and '/' in model_name_or_path:
+                feature_extractor = load_feature_extractor(model_name_or_path)
+            else:
+                feature_extractor = load_feature_extractor()
+        else:
+            feature_extractor = load_feature_extractor()
     d = feature_extractor.to_dict()
     if d.get('feature_extractor_type') != 'Wav2Vec2FeatureExtractor':
         m = f'WARNING: Feature extractor {type(feature_extractor)} '

@@ -188,4 +188,8 @@ def get_row_index_of_vector_in_matrix(vector, matrix):
     vector  is the vector to find in the matrix
     matrix  is the matrix to search for the vector
     '''
-    return np.argwhere((vector == matrix).all(1)).flatten()[0]
+    matches = np.argwhere(np.isclose(matrix, vector, rtol = 1e-5,
+        atol = 1e-8).all(1)).flatten()
+    if matches.size == 0:
+        raise ValueError('vector was not found in the codebook')
+    return matches[0]

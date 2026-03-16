@@ -1,10 +1,43 @@
 [build-system]
-requires = ["setuptools"]
+requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "to-vector"
-version = "0.1.0"
-dependencies = ["librosa","transformers","huggingface_hub","torch","torchaudio",
-    "python-decouple"]
+version = "0.1.1"
 description = "A tool to extract hidden states from models."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+    { name = "Martijn Bentum" }
+]
+keywords = ["audio", "speech", "embeddings", "transformers", "wav2vec2"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "huggingface_hub",
+    "librosa",
+    "python-decouple",
+    "torch",
+    "torchaudio",
+    "transformers",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.urls]
+Homepage = "https://github.com/martijnbentum/to-vector"
+Repository = "https://github.com/martijnbentum/to-vector"
+Issues = "https://github.com/martijnbentum/to-vector/issues"
+
+[tool.setuptools.packages.find]
+include = ["to_vector*"]
