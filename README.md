@@ -17,13 +17,13 @@ preprocessing and tensor plumbing each time.
 From GitHub:
 
 ```bash
-pip install git+ssh://git@github.com/martijnbentum/to-vector.git#egg=to-vector
+pip install git+https://git@github.com/martijnbentum/to-vector.git#egg=to-vector
 ```
 
 With `uv`:
 
 ```bash
-uv pip install git+ssh://git@github.com/martijnbentum/to-vector.git
+uv pip install git+https://git@github.com/martijnbentum/to-vector.git
 ```
 
 For development:
