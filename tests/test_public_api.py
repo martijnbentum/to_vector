@@ -187,6 +187,7 @@ class EntryPointTests(unittest.TestCase):
             model='repo/model', numpify_output=False)
 
         self.assertIsNone(result.last_hidden_state)
+        self.assertEqual(result.model_type, 'wav2vec2')
 
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.audio.standardize_audio')
@@ -211,6 +212,7 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(len(outputs.hidden_states), 2)
         self.assertEqual(outputs.hidden_states[-1].shape, (1, 1, 2))
         self.assertEqual(outputs.extract_features.shape, (1, 1, 2))
+        self.assertEqual(outputs.model_type, 'spidr')
 
     def test_public_api_exports_main_helpers(self):
         for name in [

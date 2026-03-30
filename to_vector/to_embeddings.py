@@ -36,6 +36,7 @@ def _huggingface_audio_to_vector(audio_array, model, model_type,
         outputs = model(**inputs, output_hidden_states=True)
     if hasattr(outputs, 'last_hidden_state'):
         outputs.last_hidden_state = None
+    outputs.model_type = model_type
     if not hasattr(outputs, 'extract_features'):
         if model_type == 'hubert':
             o = audio_to_cnn(audio_array, model, gpu)
@@ -58,6 +59,7 @@ def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
     outputs = BaseModelOutput(
         hidden_states=tuple(hidden_states))
     outputs.extract_features = extract_features
+    outputs.model_type = 'spidr'
     if numpify_output: return numpify(outputs)
     return outputs
 
