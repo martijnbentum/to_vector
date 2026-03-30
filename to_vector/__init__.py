@@ -11,8 +11,9 @@ from .load import (
     default_checkpoint,
     load_audio,
     load_feature_extractor,
+    load_model,
     load_model_pt,
-    load_pretrained_model,
+    load_spidr_model,
 )
 from .to_embeddings import audio_to_cnn, audio_to_vector, filename_to_cnn, filename_to_vector
 
@@ -30,6 +31,7 @@ __all__ = [
     'filename_to_vector',
     'load_audio',
     'load_feature_extractor',
+    'load_model',
     'load_model_pt',
-    'load_pretrained_model',
+    'load_spidr_model',
 ]

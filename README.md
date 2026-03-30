@@ -57,13 +57,11 @@ Load audio once and reuse a model:
 import to_vector
 
 audio = to_vector.load_audio("example.wav", start=0.5, end=1.5)
-model = to_vector.load_pretrained_model("facebook/wav2vec2-base")
-feature_extractor = to_vector.load_feature_extractor("facebook/wav2vec2-base")
+model = to_vector.load_model("facebook/wav2vec2-base")
 
 outputs = to_vector.audio_to_vector(
     audio,
     model=model,
-    feature_extractor=feature_extractor,
 )
 ```
 

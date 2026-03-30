@@ -4,66 +4,57 @@ import numpy as np
 import torch
 
 def filename_to_codebook_indices(audio_filename, start=0.0, end=None,
-    model_pt=None, feature_extractor = None, gpu = False):
+    model_pt=None, gpu = False):
     '''Convert an audio file to codebook indices using a pretrained model.
     audio_filename         Path to the audio file.
     start                  Start time in seconds. Default is 0.0.
     end                    End time in seconds. Default is None, which means
                             the end of the file.
     model_pt               A pretrained Wav2Vec2ForPreTraining model which has
-                            the codebook. If None, the default model will be
-                            used.
-    feature_extractor      A feature extractor. If None, the default feature
-                            extractor will be used.
+                           the codebook. If None, the default model will be
+                           used.
     gpu                     If True, the model will be moved to GPU if available.
     '''
     array = load.load_audio(audio_filename,start, end)
-    codebook_indices = audio_to_codebook_indices(array, model_pt, 
-        feature_extractor, gpu)
+    codebook_indices = audio_to_codebook_indices(array, model_pt, gpu)
     return codebook_indices
 
 def filename_to_codevectors(audio_filename, start=0.0, end=None,
-    model_pt=None, feature_extractor = None, gpu = False):
+    model_pt=None, gpu = False):
     '''Convert an audio file to codevectors using a pretrained model.
     audio_filename         Path to the audio file.
     start                  Start time in seconds. Default is 0.0.
     end                    End time in seconds. Default is None, which means
                             the end of the file.
     model_pt               A pretrained Wav2Vec2ForPreTraining model which has
-                            the codebook. If None, the default model will be
-                            used.
-    feature_extractor      A feature extractor. If None, the default feature
-                            extractor will be used.
+                           the codebook. If None, the default model will be
+                           used.
     gpu                     If True, the model will be moved to GPU if available.
     '''
     array = load.load_audio(audio_filename,start, end)
-    codevectors = audio_to_codevectors(array, model_pt, feature_extractor, gpu)
+    codevectors = audio_to_codevectors(array, model_pt, gpu)
     return codevectors
 
-def audio_to_codevectors(audio, model_pt = None, feature_extractor = None, 
-    gpu = False):
+def audio_to_codevectors(audio, model_pt = None, gpu = False):
     '''map an audio array to codevectors
     audio           is a numpy array of the audio signal
     model_pt        is the Wav2Vec2ForPreTraining model which has the codebook
-    feature_extractor is the feature extractor to use
     gpu             whether to use gpu or not
     '''
     if model_pt is None:
         model_pt = load.load_model_pt(gpu=gpu)
-    cnn = to_embeddings.audio_to_cnn(audio, model_pt, feature_extractor, gpu)
+    cnn = to_embeddings.audio_to_cnn(audio, model_pt, gpu)
     return cnn_output_to_codevectors(cnn, model_pt)
 
-def audio_to_codebook_indices(audio, model_pt = None, feature_extractor = None,
-    gpu = False):
+def audio_to_codebook_indices(audio, model_pt = None, gpu = False):
     '''map an audio array to codebook indices
     audio           is a numpy array of the audio signal
     model_pt        is the Wav2Vec2ForPreTraining model which has the codebook
-    feature_extractor is the feature extractor to use
     gpu             whether to use gpu or not
     '''
     if model_pt is None:
         model_pt = load.load_model_pt(gpu=gpu)
-    codevectors = audio_to_codevectors(audio, model_pt, feature_extractor, gpu)
+    codevectors = audio_to_codevectors(audio, model_pt, gpu)
     codebook = load_codebook(model_pt)
     codebook_indices = codevectors_to_codebook_indices(codevectors, codebook)
     return codebook_indices
