@@ -8,7 +8,7 @@ import tempfile
 import numpy as np
 
 import to_vector
-from to_vector import codebook, load
+from to_vector import load, wav2vec2_codebook
 
 
 class DummyModel:
@@ -108,7 +108,8 @@ class CodebookTests(unittest.TestCase):
         matrix = np.array([[1.0, 2.0], [3.0, 4.0]])
         vector = np.array([3.0 + 1e-7, 4.0 - 1e-7])
 
-        index = codebook.get_row_index_of_vector_in_matrix(vector, matrix)
+        index = wav2vec2_codebook.get_row_index_of_vector_in_matrix(
+            vector, matrix)
 
         self.assertEqual(index, 1)
 
@@ -116,7 +117,8 @@ class CodebookTests(unittest.TestCase):
         matrix = np.array([[1.0, 2.0], [3.0, 4.0]])
 
         with self.assertRaisesRegex(ValueError, 'vector was not found in the codebook'):
-            codebook.get_row_index_of_vector_in_matrix(np.array([9.0, 9.0]), matrix)
+            wav2vec2_codebook.get_row_index_of_vector_in_matrix(
+                np.array([9.0, 9.0]), matrix)
 
 
 class EntryPointTests(unittest.TestCase):

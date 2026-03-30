@@ -1,7 +1,7 @@
 '''Public package API for to-vector.'''
 
 from .attention import audio_to_attention, filename_to_attention
-from .codebook import (
+from .wav2vec2_codebook import (
     audio_to_codebook_indices,
     audio_to_codevectors,
     filename_to_codebook_indices,
