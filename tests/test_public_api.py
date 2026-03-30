@@ -7,6 +7,7 @@ import tempfile
 
 import numpy as np
 import torch
+from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
 from to_vector import load, wav2vec2_codebook
@@ -65,6 +66,15 @@ class FakeSpidrModel(DeviceModel):
         ])
         self.get_codebooks = mock.Mock(
             return_value=[torch.tensor([[[9.0, 10.0]]])])
+
+
+class FakeHuggingFaceModel(DeviceModel):
+    def __init__(self, outputs):
+        super().__init__(device_type='cpu')
+        self.outputs = outputs
+
+    def __call__(self, **kwargs):
+        return self.outputs
 
 
 class LoadTests(unittest.TestCase):
@@ -157,6 +167,28 @@ class CodebookTests(unittest.TestCase):
 
 class EntryPointTests(unittest.TestCase):
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
+    @mock.patch('to_vector.to_embeddings.load.get_model_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.to_embeddings.load.prepare_model')
+    def test_audio_to_vector_removes_huggingface_last_hidden_state(
+        self, mock_prepare_model, mock_get_model_type,
+        mock_prepare_feature_extractor
+    ):
+        outputs = BaseModelOutput(
+            last_hidden_state=torch.tensor([[[1.0]]]),
+            hidden_states=(torch.tensor([[[2.0]]]),))
+        model = FakeHuggingFaceModel(outputs)
+        feature_extractor = mock.Mock(
+            return_value={'input_values': torch.tensor([[1.0]])})
+        mock_prepare_model.return_value = model
+        mock_prepare_feature_extractor.return_value = feature_extractor
+
+        result = to_vector.audio_to_vector(np.array([1.0, 2.0, 3.0]),
+            model='repo/model', numpify_output=False)
+
+        self.assertIsNone(result.last_hidden_state)
+
+    @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.audio.standardize_audio')
     @mock.patch('to_vector.to_embeddings.load.get_model_type',
         return_value='spidr')
@@ -179,8 +211,6 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(len(outputs.hidden_states), 2)
         self.assertEqual(outputs.hidden_states[-1].shape, (1, 1, 2))
         self.assertEqual(outputs.extract_features.shape, (1, 1, 2))
-        self.assertEqual(len(outputs.teacher_hidden_states), 1)
-        self.assertEqual(len(outputs.codebook_predictions), 1)
 
     def test_public_api_exports_main_helpers(self):
         for name in [

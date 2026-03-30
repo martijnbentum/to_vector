@@ -34,6 +34,8 @@ def _huggingface_audio_to_vector(audio_array, model, model_type,
     if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
         outputs = model(**inputs, output_hidden_states=True)
+    if hasattr(outputs, 'last_hidden_state'):
+        outputs.last_hidden_state = None
     if not hasattr(outputs, 'extract_features'):
         if model_type == 'hubert':
             o = audio_to_cnn(audio_array, model, gpu)
@@ -52,15 +54,10 @@ def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
         extract_features = model.feature_projection(extract_features)
         hidden_states = model.student.get_intermediate_outputs(
             extract_features)
-        teacher_hidden_states = model.teacher.get_intermediate_outputs(
-            extract_features)
         codebook_predictions = model.get_codebooks(x)
     outputs = BaseModelOutput(
-        last_hidden_state=hidden_states[-1],
         hidden_states=tuple(hidden_states))
     outputs.extract_features = extract_features
-    outputs.teacher_hidden_states = tuple(teacher_hidden_states)
-    outputs.codebook_predictions = tuple(codebook_predictions)
     if numpify_output: return numpify(outputs)
     return outputs
 
