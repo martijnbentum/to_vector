@@ -12,14 +12,10 @@ from transformers import AutoModel
 from transformers import AutoModelForPreTraining
 from transformers import AutoProcessor
 
-from . import model_registry
+from spidr.config import SpidRConfig
+from spidr.models import SpidR
 
-try:
-    from spidr.config import SpidRConfig
-    from spidr.models import SpidR
-except ImportError:
-    SpidRConfig = None
-    SpidR = None
+from . import model_registry
 
 
 default_cache_directory = config('HF_HOME', default='~/.cache/huggingface')
@@ -82,9 +78,6 @@ def load_spidr_model(checkpoint, gpu=False, config_filename=None,
     '''Load a SpidR model from a local checkpoint.'''
     if checkpoint is None:
         raise ValueError('checkpoint is required for SpidR models')
-    if SpidRConfig is None or SpidR is None:
-        raise ImportError(
-            'SpidR loading requires the spidr package to be installed')
     cfg = load_spidr_config(checkpoint, config_filename=config_filename)
     model = SpidR(cfg)
     checkpoint = Path(checkpoint)
@@ -262,7 +255,7 @@ def model_is_on_cpu(model):
 
 def model_is_spidr(model):
     '''Check whether a model is a SpidR model.'''
-    if SpidR is not None and isinstance(model, SpidR): return True
+    if isinstance(model, SpidR): return True
     model_name = type(model).__name__
     module_name = type(model).__module__
     return model_name == 'SpidR' or module_name.startswith('spidr')
