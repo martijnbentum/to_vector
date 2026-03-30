@@ -1,7 +1,7 @@
 '''Public package API for to-vector.'''
 
 from .attention import audio_to_attention, filename_to_attention
-from .audio import load_audio
+from .audio import load_audio, standardize_audio
 from .wav2vec2_codebook import (
     audio_to_codebook_indices,
     audio_to_codevectors,
@@ -34,4 +34,5 @@ __all__ = [
     'load_model',
     'load_model_pt',
     'load_spidr_model',
+    'standardize_audio',
 ]

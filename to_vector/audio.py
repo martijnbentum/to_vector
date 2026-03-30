@@ -1,4 +1,5 @@
 import librosa
+import numpy as np
 
 
 def load_audio(filename, start=0.0, end=None):
@@ -15,3 +16,9 @@ def load_audio(filename, start=0.0, end=None):
         offset=start,
         duration=duration)
     return audio
+
+
+def standardize_audio(x):
+    '''Standardize audio to zero mean and unit variance.'''
+    x = np.asarray(x)
+    return (x - x.mean()) / (x.std() + 1e-8)

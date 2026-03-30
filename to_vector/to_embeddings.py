@@ -4,6 +4,7 @@ from pathlib import Path
 import torch
 from transformers.modeling_outputs import BaseModelOutput
 
+
 def audio_to_vector(audio_array, model = None, gpu = False,
     numpify_output = True):
     '''Convert an audio array to a vector using a pretrained model.
@@ -17,20 +18,52 @@ def audio_to_vector(audio_array, model = None, gpu = False,
     '''
     model = load.prepare_model(model, gpu)
     model_type = load.get_model_type(model)
+    if model_type == 'spidr':
+        return _spidr_audio_to_vector(audio_array, model, numpify_output)
+    return _huggingface_audio_to_vector(audio_array, model, model_type,
+        numpify_output)
+
+
+def _huggingface_audio_to_vector(audio_array, model, model_type,
+    numpify_output=True):
+    '''Convert an audio array with a Hugging Face feature extractor.'''
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
-    inputs = feature_extractor(audio_array, sampling_rate=16_000, 
-        return_tensors='pt', padding= True)
-    if gpu:inputs = inputs.to('cuda')
+    inputs = feature_extractor(audio_array, sampling_rate=16_000,
+        return_tensors='pt', padding=True)
+    if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
-        outputs = model(**inputs,output_hidden_states = True)
+        outputs = model(**inputs, output_hidden_states=True)
     if not hasattr(outputs, 'extract_features'):
         if model_type == 'hubert':
             o = audio_to_cnn(audio_array, model, gpu)
             outputs.extract_features = o
-    if numpify_output:
-        return numpify(outputs)
+    if numpify_output: return numpify(outputs)
     return outputs
+
+
+def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
+    '''Convert an audio array with SpidR-specific frontend logic.'''
+    x = audio.standardize_audio(audio_array)
+    x = torch.as_tensor(x, dtype=torch.float32).unsqueeze(0)
+    if load.model_is_on_gpu(model): x = x.to('cuda')
+    with torch.no_grad():
+        extract_features = model.feature_extractor(x)
+        extract_features = model.feature_projection(extract_features)
+        hidden_states = model.student.get_intermediate_outputs(
+            extract_features)
+        teacher_hidden_states = model.teacher.get_intermediate_outputs(
+            extract_features)
+        codebook_predictions = model.get_codebooks(x)
+    outputs = BaseModelOutput(
+        last_hidden_state=hidden_states[-1],
+        hidden_states=tuple(hidden_states))
+    outputs.extract_features = extract_features
+    outputs.teacher_hidden_states = tuple(teacher_hidden_states)
+    outputs.codebook_predictions = tuple(codebook_predictions)
+    if numpify_output: return numpify(outputs)
+    return outputs
+
 
 def filename_to_vector(audio_filename, start=0.0, end=None,
     model=None, gpu = False, identifier = '', name = '',
@@ -80,6 +113,7 @@ def numpify(outputs):
         hs.append(hidden_state.cpu().numpy())
     outputs.hidden_states = hs
     return outputs
+
 
 def audio_to_cnn(audio, model=None, gpu = False, identifier = '',
     name = ''):
