@@ -1,3 +1,4 @@
+from . import audio
 from . import load
 from pathlib import Path
 import torch
@@ -45,7 +46,7 @@ def filename_to_vector(audio_filename, start=0.0, end=None,
     numpify_output         If True, the output will be converted to numpy arrays.
     '''
     audio_filename = Path(audio_filename).resolve()
-    array = load.load_audio(audio_filename,start, end)
+    array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_vector(array, model, gpu, numpify_output)
     outputs = add_info(outputs, audio_filename, start, end, identifier, name)
     return outputs
@@ -120,10 +121,9 @@ def filename_to_cnn(audio_filename, start=0.0, end=None,
     name                   An optional name to add to the output.
     '''
     audio_filename = Path(audio_filename).resolve()
-    array = load.load_audio(audio_filename,start, end)
+    array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_cnn(array, model, gpu, identifier, name)
     o = BaseModelOutput(hidden_states = None)
     o.extract_features = outputs
     outputs = add_info(o, audio_filename, start, end, identifier, name)
     return outputs
-

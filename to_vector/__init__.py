@@ -1,6 +1,7 @@
 '''Public package API for to-vector.'''
 
 from .attention import audio_to_attention, filename_to_attention
+from .audio import load_audio
 from .wav2vec2_codebook import (
     audio_to_codebook_indices,
     audio_to_codevectors,
@@ -9,7 +10,6 @@ from .wav2vec2_codebook import (
 )
 from .load import (
     default_checkpoint,
-    load_audio,
     load_feature_extractor,
     load_model,
     load_model_pt,

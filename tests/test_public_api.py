@@ -90,7 +90,7 @@ class LoadTests(unittest.TestCase):
         mock_librosa = SimpleNamespace(
             load=mock.Mock(return_value=(np.array([0.1]), 16000))
         )
-        with mock.patch.object(load, 'librosa', mock_librosa):
+        with mock.patch('to_vector.audio.librosa', mock_librosa):
             audio = load.load_audio('sample.wav', start=0.0, end=0.0)
 
         np.testing.assert_array_equal(audio, np.array([0.1]))

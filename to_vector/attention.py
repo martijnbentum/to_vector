@@ -1,3 +1,4 @@
+from . import audio
 from pathlib import Path
 import torch
 from . import load
@@ -48,7 +49,7 @@ def filename_to_attention(audio_filename, start = 0.0, end = None,
     average_heads           If True, average attention across heads.
     '''
     audio_filename = Path(audio_filename).resolve()
-    array = load.load_audio(audio_filename, start, end)
+    array = audio.load_audio(audio_filename, start, end)
     return audio_to_attention(array, model, gpu, numpify_output, layer, head,
         average_heads)
 

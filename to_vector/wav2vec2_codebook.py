@@ -1,3 +1,4 @@
+from . import audio
 from . import load
 from . import to_embeddings
 import numpy as np
@@ -15,7 +16,7 @@ def filename_to_codebook_indices(audio_filename, start=0.0, end=None,
                            used.
     gpu                     If True, the model will be moved to GPU if available.
     '''
-    array = load.load_audio(audio_filename,start, end)
+    array = audio.load_audio(audio_filename, start, end)
     codebook_indices = audio_to_codebook_indices(array, model_pt, gpu)
     return codebook_indices
 
@@ -31,7 +32,7 @@ def filename_to_codevectors(audio_filename, start=0.0, end=None,
                            used.
     gpu                     If True, the model will be moved to GPU if available.
     '''
-    array = load.load_audio(audio_filename,start, end)
+    array = audio.load_audio(audio_filename, start, end)
     codevectors = audio_to_codevectors(array, model_pt, gpu)
     return codevectors
 

@@ -5,7 +5,6 @@ import warnings
 
 from decouple import config
 from huggingface_hub import login
-import librosa
 import torch
 from transformers import AutoFeatureExtractor
 from transformers import AutoModel
@@ -15,6 +14,7 @@ from transformers import AutoProcessor
 from spidr.config import SpidRConfig
 from spidr.models import SpidR
 
+from .audio import load_audio
 from . import model_registry
 
 
@@ -26,27 +26,6 @@ wav2vec2_base = 'facebook/wav2vec2-base'
 hubert_base = 'facebook/hubert-base-ls960'
 wavlm_base = 'microsoft/wavlm-base-plus'
 default_checkpoint = wav2vec2_base
-
-
-def login_huggingface(token=None):
-    '''Login to Hugging Face if a token is configured or provided.'''
-    if token is None: token = config('HF_TOKEN', default=None)
-    if not token: return False
-    login(token)
-    return True
-
-
-def load_audio(filename, start=0.0, end=None):
-    '''Load audio from disk at 16 kHz.'''
-    if end is None:
-        duration = None
-    else:
-        if end < start:
-            raise ValueError('end must be greater than or equal to start')
-        duration = end - start
-    audio, sr = librosa.load(filename, sr=16000, offset=start,
-        duration=duration)
-    return audio
 
 
 def load_model(model_name_or_path=None, cache_directory=None, gpu=False,
@@ -259,6 +238,14 @@ def model_is_spidr(model):
     model_name = type(model).__name__
     module_name = type(model).__module__
     return model_name == 'SpidR' or module_name.startswith('spidr')
+
+
+def login_huggingface(token=None):
+    '''Login to Hugging Face if a token is configured or provided.'''
+    if token is None: token = config('HF_TOKEN', default=None)
+    if not token: return False
+    login(token)
+    return True
 
 
 def get_model_type(model):
