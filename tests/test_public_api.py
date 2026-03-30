@@ -7,9 +7,11 @@ import tempfile
 
 import numpy as np
 import torch
+from torch import nn
 from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
+from to_vector import _spidr_attention
 from to_vector import load, spidr_codebook, wav2vec2_codebook
 
 
@@ -75,6 +77,55 @@ class FakeHuggingFaceModel(DeviceModel):
 
     def __call__(self, **kwargs):
         return self.outputs
+
+
+class FakeSpidrFeatureExtractor(nn.Module):
+    def forward(self, waveform):
+        return waveform.unsqueeze(-1).repeat(1, 1, 4)
+
+
+class ZeroPositionalEmbedding(nn.Module):
+    def forward(self, x, attention_mask=None):
+        return torch.zeros_like(x)
+
+
+class FakeSpidrAttentionLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.attention = nn.Module()
+        self.attention.embed_dim = 4
+        self.attention.num_heads = 2
+        self.attention.dropout = 0.0
+        self.attention.qkv = nn.Linear(4, 12, bias=False)
+        self.attention.proj = nn.Linear(4, 4, bias=False)
+        self.dropout = nn.Identity()
+        self.layer_norm = nn.Identity()
+        self.final_layer_norm = nn.Identity()
+        self.feed_forward = nn.Identity()
+        self.layer_norm_first = False
+        with torch.no_grad():
+            eye = torch.eye(4)
+            self.attention.qkv.weight.copy_(torch.cat([eye, eye, eye], dim=0))
+            self.attention.proj.weight.copy_(eye)
+
+
+class FakeSpidrStudent(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.pos_conv_embed = ZeroPositionalEmbedding()
+        self.layer_norm = nn.Identity()
+        self.layer_norm_first = False
+        self.dropout = nn.Identity()
+        self.layers = nn.ModuleList([FakeSpidrAttentionLayer()])
+
+
+class FakeSpidrAttentionModel(DeviceModel):
+    def __init__(self):
+        super().__init__(device_type='cpu')
+        self.base_model_prefix = 'spidr'
+        self.feature_extractor = FakeSpidrFeatureExtractor()
+        self.feature_projection = nn.Identity()
+        self.student = FakeSpidrStudent()
 
 
 class LoadTests(unittest.TestCase):
@@ -191,8 +242,62 @@ class CodebookTests(unittest.TestCase):
         np.testing.assert_array_equal(
             codevectors[1], np.array([[5.0, 6.0], [7.0, 8.0]]))
 
+    def test_spidr_attention_helper_returns_layer_attention_tensors(self):
+        model = FakeSpidrAttentionModel()
+
+        outputs = _spidr_attention.audio_to_attention_outputs(
+            np.array([1.0, 0.0, -1.0]), model)
+
+        self.assertEqual(outputs.model_type, 'spidr')
+        self.assertEqual(len(outputs.attentions), 1)
+        self.assertEqual(tuple(outputs.attentions[0].shape), (1, 2, 3, 3))
+        sums = outputs.attentions[0].sum(dim=-1)
+        self.assertTrue(torch.allclose(sums, torch.ones_like(sums)))
+
 
 class EntryPointTests(unittest.TestCase):
+    @mock.patch('to_vector.attention.load.prepare_feature_extractor')
+    @mock.patch('to_vector.attention.load.get_model_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.attention.load.prepare_model')
+    def test_audio_to_attention_sets_huggingface_model_type(
+        self, mock_prepare_model, mock_get_model_type,
+        mock_prepare_feature_extractor
+    ):
+        outputs = BaseModelOutput(
+            attentions=(torch.ones(1, 2, 3, 3),))
+        model = FakeHuggingFaceModel(outputs)
+        feature_extractor = mock.Mock(
+            return_value={'input_values': torch.tensor([[1.0]])})
+        mock_prepare_model.return_value = model
+        mock_prepare_feature_extractor.return_value = feature_extractor
+
+        result = to_vector.audio_to_attention(np.array([1.0, 2.0, 3.0]),
+            model='repo/model', numpify_output=False)
+
+        self.assertEqual(result.model_type, 'wav2vec2')
+
+    @mock.patch('to_vector.attention.load.prepare_feature_extractor')
+    @mock.patch('to_vector.attention.load.get_model_type',
+        return_value='spidr')
+    @mock.patch('to_vector.attention.load.prepare_model')
+    def test_audio_to_attention_routes_spidr_without_feature_extractor(
+        self, mock_prepare_model, mock_get_model_type,
+        mock_prepare_feature_extractor
+    ):
+        model = FakeSpidrAttentionModel()
+        mock_prepare_model.return_value = model
+
+        outputs = to_vector.audio_to_attention(np.array([1.0, 0.0, -1.0]),
+            model='checkpoint.pt', numpify_output=False)
+
+        mock_prepare_model.assert_called_once_with(
+            'checkpoint.pt', False, for_attention_extraction=True)
+        mock_get_model_type.assert_called_once_with(model)
+        mock_prepare_feature_extractor.assert_not_called()
+        self.assertEqual(outputs.model_type, 'spidr')
+        self.assertEqual(tuple(outputs.attentions.shape), (1, 2, 3, 3))
+
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.load.get_model_type',
         return_value='wav2vec2')

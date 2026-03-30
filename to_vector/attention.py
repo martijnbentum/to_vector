@@ -1,3 +1,4 @@
+from . import _spidr_attention
 from . import audio
 from pathlib import Path
 import torch
@@ -18,6 +19,17 @@ def audio_to_attention(audio_array, model, gpu = False,
     average_heads           If True, average attention across heads.
     '''
     model = load.prepare_model(model, gpu, for_attention_extraction = True)
+    model_type = load.get_model_type(model)
+    if model_type == 'spidr':
+        return _spidr_audio_to_attention(audio_array, model, numpify_output,
+            layer, head, average_heads)
+    return _huggingface_audio_to_attention(audio_array, model, model_type,
+        numpify_output, layer, head, average_heads)
+
+
+def _huggingface_audio_to_attention(audio_array, model, model_type,
+    numpify_output=True, layer=None, head=None, average_heads=False):
+    '''Extract attention weights with a Hugging Face model.'''
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
     inputs = feature_extractor(audio_array, sampling_rate = 16_000,
@@ -27,10 +39,25 @@ def audio_to_attention(audio_array, model, gpu = False,
         outputs = model(**inputs, output_attentions = True)
     attention = outputs_to_attention(outputs, layer, head, average_heads,
         numpify_output = False)
+    return pack_attention_outputs(attention, model_type, numpify_output)
+
+
+def _spidr_audio_to_attention(audio_array, model, numpify_output=True,
+    layer=None, head=None, average_heads=False):
+    '''Extract attention weights with local SpidR logic.'''
+    outputs = _spidr_attention.audio_to_attention_outputs(audio_array, model)
+    attention = outputs_to_attention(outputs, layer, head, average_heads,
+        numpify_output=False)
+    return pack_attention_outputs(attention, 'spidr', numpify_output)
+
+
+def pack_attention_outputs(attention, model_type, numpify_output=True):
+    '''Create a compact attention output object.'''
     if numpify_output: attention = attention.detach().cpu().numpy()
     outputs = BaseModelOutput(hidden_states = None)
     outputs.extract_features = None
     outputs.attentions = attention
+    outputs.model_type = model_type
     return outputs
 
 
