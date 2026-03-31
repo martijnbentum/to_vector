@@ -11,10 +11,12 @@ SUPPORTED_MODEL_TYPE_NAMES = ('wav2vec2', 'wavlm', 'hubert', 'spidr')
 
 
 def is_supported_model(model):
+    '''Check whether a model is one of the supported model classes.'''
     return isinstance(model, SUPPORTED_MODEL_TYPES)
 
 
 def is_spidr_model(model):
+    '''Check whether a model instance behaves like a SpidR model.'''
     if isinstance(model, SpidR): return True
     model_name = type(model).__name__
     module_name = type(model).__module__
@@ -32,6 +34,7 @@ def model_to_type(model):
         if 'Hubert' in model_name: return 'hubert'
         if 'WavLM' in model_name: return 'wavlm'
     return 'unknown'
+
 
 def filename_model_type(model_name_or_path=None, config_filename=None):
     '''Infer model type from a local config.json file when available.'''

@@ -1,4 +1,3 @@
-import json
 import os
 from pathlib import Path
 import warnings
@@ -159,6 +158,7 @@ def prepare_feature_extractor(model):
             return load_feature_extractor(model_name_or_path)
     return load_feature_extractor()
 
+
 def spidr_config_to_kwargs(config_dict):
     '''Extract SpidR config kwargs from a json dictionary.'''
     if config_dict is None: return {}
@@ -209,8 +209,6 @@ def login_huggingface(token=None):
     if not token: return False
     login(token)
     return True
-
-
 
 
 def move_model_to_gpu(model):

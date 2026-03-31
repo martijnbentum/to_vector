@@ -84,6 +84,31 @@ attention = to_vector.filename_to_attention(
 ).attentions
 ```
 
+Extract vectors from a local SpidR checkpoint:
+
+```python
+import to_vector
+
+outputs = to_vector.filename_to_vector(
+    "example.wav",
+    model="path/to/spidr-checkpoint.pt",
+)
+hidden_states = outputs.hidden_states
+```
+
+Extract student attention from a local SpidR checkpoint:
+
+```python
+import to_vector
+
+attention = to_vector.filename_to_attention(
+    "example.wav",
+    model="path/to/spidr-checkpoint.pt",
+    layer=0,
+    average_heads=True,
+).attentions
+```
+
 Extract codebook indices from a pretraining checkpoint:
 
 ```python
