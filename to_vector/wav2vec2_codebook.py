@@ -1,11 +1,13 @@
-from . import audio
-from . import load
-from . import to_embeddings
 import numpy as np
 import torch
 
+from . import audio
+from . import load
+from . import to_embeddings
+
+
 def filename_to_codebook_indices(audio_filename, start=0.0, end=None,
-    model_pt=None, gpu = False):
+    model_pt=None, gpu=False):
     '''Convert an audio file to codebook indices using a pretrained model.
     audio_filename         Path to the audio file.
     start                  Start time in seconds. Default is 0.0.
@@ -14,14 +16,15 @@ def filename_to_codebook_indices(audio_filename, start=0.0, end=None,
     model_pt               A pretrained Wav2Vec2ForPreTraining model which has
                            the codebook. If None, the default model will be
                            used.
-    gpu                     If True, the model will be moved to GPU if available.
+    gpu:                   whether to request CUDA
     '''
     array = audio.load_audio(audio_filename, start, end)
     codebook_indices = audio_to_codebook_indices(array, model_pt, gpu)
     return codebook_indices
 
+
 def filename_to_codevectors(audio_filename, start=0.0, end=None,
-    model_pt=None, gpu = False):
+    model_pt=None, gpu=False):
     '''Convert an audio file to codevectors using a pretrained model.
     audio_filename         Path to the audio file.
     start                  Start time in seconds. Default is 0.0.
@@ -30,13 +33,13 @@ def filename_to_codevectors(audio_filename, start=0.0, end=None,
     model_pt               A pretrained Wav2Vec2ForPreTraining model which has
                            the codebook. If None, the default model will be
                            used.
-    gpu                     If True, the model will be moved to GPU if available.
+    gpu:                   whether to request CUDA
     '''
     array = audio.load_audio(audio_filename, start, end)
     codevectors = audio_to_codevectors(array, model_pt, gpu)
     return codevectors
 
-def audio_to_codevectors(audio, model_pt = None, gpu = False):
+def audio_to_codevectors(audio, model_pt=None, gpu=False):
     '''map an audio array to codevectors
     audio           is a numpy array of the audio signal
     model_pt        is the Wav2Vec2ForPreTraining model which has the codebook
@@ -47,7 +50,7 @@ def audio_to_codevectors(audio, model_pt = None, gpu = False):
     cnn = to_embeddings.audio_to_cnn(audio, model_pt, gpu)
     return cnn_output_to_codevectors(cnn, model_pt)
 
-def audio_to_codebook_indices(audio, model_pt = None, gpu = False):
+def audio_to_codebook_indices(audio, model_pt=None, gpu=False):
     '''map an audio array to codebook indices
     audio           is a numpy array of the audio signal
     model_pt        is the Wav2Vec2ForPreTraining model which has the codebook
@@ -78,12 +81,14 @@ def cnn_output_to_codevectors(cnn_output, model_pt, codebook=None):
     codebook    is the codebook to use, if None it will be loaded from the model
     '''
     cnn_output = torch.from_numpy(cnn_output)
-    m = 'cnn output has more than one batch, please provide a single batch of cnn output'
-    if cnn_output.ndim == 1: cnn_output = cnn_output.view(1,1,-1)
-    elif cnn_output.ndim == 2: 
-        cnn_output = cnn_output.view(1,cnn_output.shape[0],-1)
-    elif cnn_output.ndim == 3: pass
-    else: 
+    m = 'cnn output has more than one batch, please provide a single batch '
+    m += 'of cnn output'
+    if cnn_output.ndim == 1: cnn_output = cnn_output.view(1, 1, -1)
+    elif cnn_output.ndim == 2:
+        cnn_output = cnn_output.view(1, cnn_output.shape[0], -1)
+    elif cnn_output.ndim == 3:
+        pass
+    else:
         raise ValueError(f'cnn output has {cnn_output.ndim} dimensions (<4)')
     codevectors, tensor = model_pt.quantizer(cnn_output)
     codevectors = codevectors.detach().numpy()

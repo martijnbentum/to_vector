@@ -43,9 +43,7 @@ def layer_output_and_attention(layer, x, attention_mask=None):
     else:
         attention_input = x
     attention_output, attention = self_attention_with_weights(
-        layer.attention,
-        attention_input,
-        attention_mask)
+        layer.attention, attention_input, attention_mask)
     attention_output = layer.dropout(attention_output)
     x = residual + attention_output
     if layer.layer_norm_first:
@@ -76,9 +74,7 @@ def self_attention_with_weights(attention, x, attention_mask=None):
     attention_weights = torch.softmax(scores, dim=-1)
     dropout_p = attention.dropout if attention.training else 0.0
     if dropout_p:
-        attention_output_weights = F.dropout(
-            attention_weights,
-            p=dropout_p,
+        attention_output_weights = F.dropout(attention_weights, p=dropout_p,
             training=True)
     else:
         attention_output_weights = attention_weights

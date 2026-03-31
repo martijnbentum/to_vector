@@ -10,12 +10,11 @@ from transformers import AutoFeatureExtractor
 from transformers import AutoModel
 from transformers import AutoModelForPreTraining
 from transformers import AutoProcessor
-
 from spidr.config import SpidRConfig
 from spidr.models import SpidR
 
-from .audio import load_audio
 from . import model_registry
+from .audio import load_audio
 
 
 default_cache_directory = config('HF_HOME', default='~/.cache/huggingface')
@@ -106,7 +105,7 @@ def load_wav2vec2_base_model(cache_directory=None, gpu=False):
 
 def load_processor(model_name_or_path=None):
     '''Load a processor.
-    model_name_or_path: Hugging Face repo id or local path
+    model_name_or_path:  Hugging Face repo id or local path
     '''
     if model_name_or_path is None: model_name_or_path = default_checkpoint
     return AutoProcessor.from_pretrained(model_name_or_path)
@@ -114,7 +113,7 @@ def load_processor(model_name_or_path=None):
 
 def load_feature_extractor(model_name_or_path=None):
     '''Load feature extractor.
-    model_name_or_path: Hugging Face repo id or local path
+    model_name_or_path:  Hugging Face repo id or local path
     '''
     if model_name_or_path is None: model_name_or_path = default_checkpoint
     return AutoFeatureExtractor.from_pretrained(model_name_or_path)
@@ -136,18 +135,17 @@ def prepare_model(model, gpu, cache_directory=None,
             config_filename=config_filename, strict=strict)
     model_type = get_model_type(model)
     if model_type == 'unknown':
-        supported_types = '\n'.join(['\t' + str(t)
+        m = f'WARNING: Model {type(model)} may not be supported. '
+        m += 'Make sure it is one of the supported models: \n'
+        m += '\n'.join(['\t' + str(t)
             for t in model_registry.SUPPORTED_MODEL_TYPES])
-        message = f'WARNING: Model {type(model)} may not be supported. '
-        message += 'Make sure it is one of the supported models: \n'
-        message += supported_types
-        print(message)
+        print(m)
     if for_attention_extraction and model_type != 'spidr':
         if model.config._attn_implementation != 'eager':
-            message = f'WARNING: Model {model.base_model_prefix} '
-            message += 'is not configured for eager attention extraction. '
-            message += 'Attention extraction may not work as expected.'
-            print(message)
+            m = f'WARNING: Model {model.base_model_prefix} '
+            m += 'is not configured for eager attention extraction. '
+            m += 'Attention extraction may not work as expected.'
+            print(m)
     return model
 
 

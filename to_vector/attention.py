@@ -1,25 +1,26 @@
-from . import _spidr_attention
-from . import audio
 from pathlib import Path
+
 import torch
-from . import load
-from .to_embeddings import add_info
 from transformers.modeling_outputs import BaseModelOutput
 
+from . import _spidr_attention
+from . import audio
+from . import load
+from .to_embeddings import add_info
 
-def audio_to_attention(audio_array, model, gpu = False,
-    numpify_output = True, layer = None, head = None,
-    average_heads = False):
+
+def audio_to_attention(audio_array, model, gpu=False, numpify_output=True,
+    layer=None, head=None, average_heads=False):
     '''Extract attention weights from an audio array.
-    audio_array             A 1D array containing audio samples.
-    model                   A pretrained model or model name.
-    gpu                     If True, the model and inputs will be moved to GPU.
-    numpify_output          If True, convert the attention to numpy arrays.
-    layer                   Optional layer index.
-    head                    Optional head index.
-    average_heads           If True, average attention across heads.
+    audio_array:     1D audio samples
+    model:           pretrained model or model name
+    gpu:             whether to request CUDA
+    numpify_output:  whether to convert attention to numpy
+    layer:           optional layer index
+    head:            optional head index
+    average_heads:   whether to average heads
     '''
-    model = load.prepare_model(model, gpu, for_attention_extraction = True)
+    model = load.prepare_model(model, gpu, for_attention_extraction=True)
     model_type = load.get_model_type(model)
     if model_type == 'spidr':
         return _spidr_audio_to_attention(audio_array, model, numpify_output,
@@ -33,13 +34,13 @@ def _huggingface_audio_to_attention(audio_array, model, model_type,
     '''Extract attention weights with a Hugging Face model.'''
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
-    inputs = feature_extractor(audio_array, sampling_rate = 16_000,
-        return_tensors = 'pt', padding = True)
+    inputs = feature_extractor(audio_array, sampling_rate=16_000,
+        return_tensors='pt', padding=True)
     if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
-        outputs = model(**inputs, output_attentions = True)
+        outputs = model(**inputs, output_attentions=True)
     attention = outputs_to_attention(outputs, layer, head, average_heads,
-        numpify_output = False)
+        numpify_output=False)
     return pack_attention_outputs(attention, model_type, numpify_output)
 
 
@@ -55,26 +56,26 @@ def _spidr_audio_to_attention(audio_array, model, numpify_output=True,
 def pack_attention_outputs(attention, model_type, numpify_output=True):
     '''Create a compact attention output object.'''
     if numpify_output: attention = attention.detach().cpu().numpy()
-    outputs = BaseModelOutput(hidden_states = None)
+    outputs = BaseModelOutput(hidden_states=None)
     outputs.extract_features = None
     outputs.attentions = attention
     outputs.model_type = model_type
     return outputs
 
 
-def filename_to_attention(audio_filename, start = 0.0, end = None,
-    model = None, gpu = False, numpify_output = True, layer = None, head = None,
-    average_heads = False):
+def filename_to_attention(audio_filename, start=0.0, end=None, model=None,
+    gpu=False, numpify_output=True, layer=None, head=None,
+    average_heads=False):
     '''Extract attention weights from an audio file.
-    audio_filename          Path to the audio file.
-    start                   Start time in seconds. Default is 0.0.
-    end                     End time in seconds. Default is None.
-    model                   A pretrained model or model name.
-    gpu                     If True, the model and inputs will be moved to GPU.
-    numpify_output          If True, convert the attention to numpy arrays.
-    layer                   Optional layer index.
-    head                    Optional head index.
-    average_heads           If True, average attention across heads.
+    audio_filename:  path to the audio file
+    start:           segment start time in seconds
+    end:             segment end time in seconds
+    model:           pretrained model or model name
+    gpu:             whether to request CUDA
+    numpify_output:  whether to convert attention to numpy
+    layer:           optional layer index
+    head:            optional head index
+    average_heads:   whether to average heads
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
@@ -107,8 +108,7 @@ def stack_attentions(attentions):
     return stacked
 
 
-def select_attention(attention, layer = None, head = None,
-    average_heads = False):
+def select_attention(attention, layer=None, head=None, average_heads=False):
     '''Select layers or heads from attention.
     attention               Attention tensor with shape (L,H,T,T) or
                             (B,L,H,T,T).
@@ -118,22 +118,22 @@ def select_attention(attention, layer = None, head = None,
     '''
     if layer is not None:
         if attention.ndim == 4: attention = attention[layer]
-        else: attention = attention[:,layer]
+        else: attention = attention[:, layer]
     if average_heads:
-        if attention.ndim == 4: attention = attention.mean(dim = 1)
-        elif attention.ndim == 5: attention = attention.mean(dim = 2)
-        elif attention.ndim == 3: attention = attention.mean(dim = 0)
-        else: attention = attention.mean(dim = 1)
+        if attention.ndim == 4: attention = attention.mean(dim=1)
+        elif attention.ndim == 5: attention = attention.mean(dim=2)
+        elif attention.ndim == 3: attention = attention.mean(dim=0)
+        else: attention = attention.mean(dim=1)
     elif head is not None:
-        if attention.ndim == 4: attention = attention[:,head]
-        elif attention.ndim == 5: attention = attention[:,:,head]
+        if attention.ndim == 4: attention = attention[:, head]
+        elif attention.ndim == 5: attention = attention[:, :, head]
         elif attention.ndim == 3: attention = attention[head]
-        else: attention = attention[:,head]
+        else: attention = attention[:, head]
     return attention
 
 
-def outputs_to_attention(outputs, layer = None, head = None,
-    average_heads = False, numpify_output = True):
+def outputs_to_attention(outputs, layer=None, head=None,
+    average_heads=False, numpify_output=True):
     '''Convert model outputs to attention arrays.
     outputs                 Model outputs with attention tensors.
     layer                   Optional layer index.

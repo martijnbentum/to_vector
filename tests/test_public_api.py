@@ -1,9 +1,9 @@
 import json
+import tempfile
 from pathlib import Path
 import unittest
-from unittest import mock
 from types import SimpleNamespace
-import tempfile
+from unittest import mock
 
 import numpy as np
 import torch
@@ -11,8 +11,8 @@ from torch import nn
 from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
-from to_vector import attention
 from to_vector import _spidr_attention
+from to_vector import attention
 from to_vector import load, spidr_codebook, wav2vec2_codebook
 
 

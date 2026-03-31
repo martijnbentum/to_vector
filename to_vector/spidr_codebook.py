@@ -12,10 +12,7 @@ def filename_to_codebook_indices(audio_filename, start=0.0, end=None,
     '''Convert an audio file to SpidR codebook indices.'''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
-    return audio_to_codebook_indices(
-        array,
-        model=model,
-        gpu=gpu)
+    return audio_to_codebook_indices(array, model=model, gpu=gpu)
 
 
 def filename_to_codevectors(audio_filename, start=0.0, end=None,
@@ -23,10 +20,7 @@ def filename_to_codevectors(audio_filename, start=0.0, end=None,
     '''Convert an audio file to SpidR codevectors.'''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
-    return audio_to_codevectors(
-        array,
-        model=model,
-        gpu=gpu)
+    return audio_to_codevectors(array, model=model, gpu=gpu)
 
 
 def audio_to_codebook_probabilities(audio_array, model=None, gpu=False):
@@ -38,16 +32,14 @@ def audio_to_codebook_probabilities(audio_array, model=None, gpu=False):
     probabilities = []
     for prediction in predictions:
         if prediction is None: continue
-        probabilities.append(normalize_probability_shape(
-            prediction.detach().cpu().numpy()))
+        probabilities.append(
+            normalize_probability_shape(prediction.detach().cpu().numpy()))
     return probabilities
 
 
 def audio_to_codebook_indices(audio_array, model=None, gpu=False):
     '''Convert audio to SpidR codebook indices.'''
-    probabilities = audio_to_codebook_probabilities(
-        audio_array,
-        model=model,
+    probabilities = audio_to_codebook_probabilities(audio_array, model=model,
         gpu=gpu)
     return probabilities_to_codebook_indices(probabilities)
 
@@ -55,9 +47,7 @@ def audio_to_codebook_indices(audio_array, model=None, gpu=False):
 def audio_to_codevectors(audio_array, model=None, gpu=False):
     '''Convert audio to SpidR codevectors.'''
     model = _spidr_util.prepare_model(model, gpu)
-    codebook_indices = audio_to_codebook_indices(
-        audio_array,
-        model=model,
+    codebook_indices = audio_to_codebook_indices(audio_array, model=model,
         gpu=False)
     codebooks = load_codebooks(model)
     return codebook_indices_to_codevectors(codebook_indices, codebooks)
@@ -86,8 +76,9 @@ def normalize_probability_shape(probability):
         return probability
     if probability.ndim == 3 and probability.shape[0] == 1:
         return probability[0]
-    raise ValueError(
-        f'unsupported SpidR codebook probability shape: {probability.shape}')
+    m = 'unsupported SpidR codebook probability shape: '
+    m += f'{probability.shape}'
+    raise ValueError(m)
 
 
 def codebook_indices_to_codevectors(codebook_indices, codebooks):

@@ -1,21 +1,19 @@
-from . import _spidr_util
-from . import audio
-from . import load
 from pathlib import Path
+
 import torch
 from transformers.modeling_outputs import BaseModelOutput
 
+from . import _spidr_util
+from . import audio
+from . import load
 
-def audio_to_vector(audio_array, model = None, gpu = False,
-    numpify_output = True):
+
+def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
     '''Convert an audio array to a vector using a pretrained model.
-    audio_array            A 1D numpy array containing the audio samples.
-    model                  A pretrained model. If None, the default model 
-                           will be loaded. If a string is provided, it will be
-                           used to load the model.
-    gpu                    If True, the model and inputs will be moved to 
-                           GPU if available.
-    numpify_output         If True, the output will be converted to numpy arrays.
+    audio_array:     1D audio samples
+    model:           pretrained model instance or model name
+    gpu:             whether to request CUDA
+    numpify_output:  whether to convert outputs to numpy
     '''
     model = load.prepare_model(model, gpu)
     model_type = load.get_model_type(model)
@@ -62,18 +60,16 @@ def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
     return outputs
 
 
-def filename_to_vector(audio_filename, start=0.0, end=None,
-    model=None, gpu = False, identifier = '', name = '',
-    numpify_output = True):
+def filename_to_vector(audio_filename, start=0.0, end=None, model=None,
+    gpu=False, identifier='', name='', numpify_output=True):
     '''Convert an audio file to a vector using a pretrained model.
-    audio_filename         Path to the audio file.
-    start                  Start time in seconds. Default is 0.0.
-    end                    End time in seconds. Default is None, which means
-                           the end of the file.
-    model                  A pretrained model. If None, the default model
-    identifier             An optional identifier to add to the output.
-    name                   An optional name to add to the output.
-    numpify_output         If True, the output will be converted to numpy arrays.
+    audio_filename:  path to the audio file
+    start:           segment start time in seconds
+    end:             segment end time in seconds
+    model:           pretrained model instance or model name
+    identifier:      optional identifier
+    name:            optional name
+    numpify_output:  whether to convert outputs to numpy
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
@@ -83,12 +79,12 @@ def filename_to_vector(audio_filename, start=0.0, end=None,
 
 def add_info(outputs, audio_filename, start, end, identifier, name):
     '''Add information about the audio file to the output object.
-    outputs            The output object to which the information will be added.
-    audio_filename     The path to the audio file.
-    start              The start time of the audio segment.
-    end                The end time of the audio segment.
-    identifier         An optional identifier to add to the output.
-    name               An optional name to add to the output.
+    outputs:         output object to update
+    audio_filename:  path to the audio file
+    start:           segment start time
+    end:             segment end time
+    identifier:      optional identifier
+    name:            optional name
     '''
     audio_filename = str(audio_filename)
     outputs.audio_filename = audio_filename
@@ -112,54 +108,51 @@ def numpify(outputs):
     return outputs
 
 
-def audio_to_cnn(audio, model=None, gpu = False, identifier = '',
-    name = ''):
+def audio_to_cnn(audio, model=None, gpu=False, identifier='', name=''):
     '''Convert an audio array to features using a pretrained model.
-    model                A pretrained model. If None, the default model
-                         if string is provided it will be used to load the model
-    gpu                  If True, the model and inputs will be moved to 
-                         GPU if available.
-    identifier           An optional identifier to add to the output.
-    name                 An optional name to add to the output.
+    audio:         1D audio samples
+    model:         pretrained model instance or model name
+    gpu:           whether to request CUDA
+    identifier:    optional identifier
+    name:          optional name
     '''
     model = load.prepare_model(model, gpu)
     if load.get_model_type(model) == 'spidr':
-        raise ValueError(
-            'audio_to_cnn() is not implemented for SpidR models yet. '
-            'Check whether the convolutional frontend can be called '
-            'directly on the SpidR model.')
+        m = 'audio_to_cnn() is not implemented for SpidR models yet. '
+        m += 'Check whether the convolutional frontend can be called '
+        m += 'directly on the SpidR model.'
+        raise ValueError(m)
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
     array = audio
     inputs = feature_extractor(array, sampling_rate=16_000, return_tensors='pt',
-        padding= True)
-    if gpu:inputs = inputs.to('cuda')
+        padding=True)
+    if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
         input_values = inputs['input_values']
         if 'ForPreTraining' in str(type(model)):
             outputs = model.wav2vec2.feature_extractor(input_values)
         else:
             outputs = model.feature_extractor(input_values)
-    outputs = outputs.transpose(1,2).detach().cpu().numpy()
+    outputs = outputs.transpose(1, 2).detach().cpu().numpy()
     return outputs
 
-def filename_to_cnn(audio_filename, start=0.0, end=None,
-    model=None, gpu = False, identifier = '', name = ''):
+
+def filename_to_cnn(audio_filename, start=0.0, end=None, model=None,
+    gpu=False, identifier='', name=''):
     '''Convert an audio file to features using a pretrained model.
-    audio_filename         Path to the audio file.
-    start                  Start time in seconds. Default is 0.0.
-    end                    End time in seconds. Default is None, which means
-                           the end of the file.
-    model                  A pretrained model. If None, the default model
-    gpu                    If True, the model and inputs will be moved to 
-                           GPU if available.
-    identifier             An optional identifier to add to the output.
-    name                   An optional name to add to the output.
+    audio_filename:  path to the audio file
+    start:           segment start time in seconds
+    end:             segment end time in seconds
+    model:           pretrained model instance or model name
+    gpu:             whether to request CUDA
+    identifier:      optional identifier
+    name:            optional name
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_cnn(array, model, gpu, identifier, name)
-    o = BaseModelOutput(hidden_states = None)
+    o = BaseModelOutput(hidden_states=None)
     o.extract_features = outputs
     outputs = add_info(o, audio_filename, start, end, identifier, name)
     return outputs

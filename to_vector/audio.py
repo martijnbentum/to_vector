@@ -10,10 +10,7 @@ def load_audio(filename, start=0.0, end=None):
         if end < start:
             raise ValueError('end must be greater than or equal to start')
         duration = end - start
-    audio, sr = librosa.load(
-        filename,
-        sr=16000,
-        offset=start,
+    audio, sr = librosa.load(filename, sr=16000, offset=start,
         duration=duration)
     return audio
 
