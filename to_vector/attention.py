@@ -3,6 +3,7 @@ from . import audio
 from pathlib import Path
 import torch
 from . import load
+from .to_embeddings import add_info
 from transformers.modeling_outputs import BaseModelOutput
 
 
@@ -77,8 +78,9 @@ def filename_to_attention(audio_filename, start = 0.0, end = None,
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
-    return audio_to_attention(array, model, gpu, numpify_output, layer, head,
+    outputs = audio_to_attention(array, model, gpu, numpify_output, layer, head,
         average_heads)
+    return add_info(outputs, audio_filename, start, end, '', '')
 
 
 def attention_to_tensor(attention):

@@ -11,6 +11,7 @@ from torch import nn
 from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
+from to_vector import attention
 from to_vector import _spidr_attention
 from to_vector import load, spidr_codebook, wav2vec2_codebook
 
@@ -52,6 +53,8 @@ class FakeSpidrModule:
 
 
 class FakeSpidrModel(DeviceModel):
+    __module__ = 'spidr.tests'
+
     def __init__(self):
         super().__init__(device_type='cpu')
         self.base_model_prefix = 'spidr'
@@ -120,6 +123,8 @@ class FakeSpidrStudent(nn.Module):
 
 
 class FakeSpidrAttentionModel(DeviceModel):
+    __module__ = 'spidr.tests'
+
     def __init__(self):
         super().__init__(device_type='cpu')
         self.base_model_prefix = 'spidr'
@@ -227,6 +232,13 @@ class CodebookTests(unittest.TestCase):
         np.testing.assert_array_equal(indices[0], np.array([1, 0]))
         np.testing.assert_array_equal(indices[1], np.array([2]))
 
+    def test_spidr_normalize_probability_shape_restores_time_axis(self):
+        probability = np.array([0.2, 0.3, 0.5])
+
+        normalized = spidr_codebook.normalize_probability_shape(probability)
+
+        self.assertEqual(normalized.shape, (1, 3))
+
     def test_spidr_codebook_indices_to_codevectors_indexes_each_codebook(self):
         indices = [np.array([1, 0]), np.array([0, 1])]
         codebooks = [
@@ -256,6 +268,16 @@ class CodebookTests(unittest.TestCase):
 
 
 class EntryPointTests(unittest.TestCase):
+    def test_audio_to_cnn_raises_clear_error_for_spidr(self):
+        with mock.patch('to_vector.to_embeddings.load.prepare_model',
+            return_value=FakeSpidrModel()):
+            with mock.patch('to_vector.to_embeddings.load.get_model_type',
+                return_value='spidr'):
+                with self.assertRaisesRegex(
+                    ValueError, 'audio_to_cnn\\(\\) is not implemented for SpidR'):
+                    to_vector.audio_to_cnn(np.array([1.0, 2.0, 3.0]),
+                        model='checkpoint.pt')
+
     @mock.patch('to_vector.attention.load.prepare_feature_extractor')
     @mock.patch('to_vector.attention.load.get_model_type',
         return_value='wav2vec2')
@@ -293,10 +315,27 @@ class EntryPointTests(unittest.TestCase):
 
         mock_prepare_model.assert_called_once_with(
             'checkpoint.pt', False, for_attention_extraction=True)
-        mock_get_model_type.assert_called_once_with(model)
+        mock_get_model_type.assert_any_call(model)
         mock_prepare_feature_extractor.assert_not_called()
         self.assertEqual(outputs.model_type, 'spidr')
         self.assertEqual(tuple(outputs.attentions.shape), (1, 2, 3, 3))
+
+    @mock.patch('to_vector.attention.audio_to_attention')
+    @mock.patch('to_vector.attention.audio.load_audio')
+    def test_filename_to_attention_adds_file_metadata(
+        self, mock_load_audio, mock_audio_to_attention
+    ):
+        output = BaseModelOutput(hidden_states=None)
+        output.attentions = np.zeros((2, 2))
+        mock_load_audio.return_value = np.array([0.1, 0.2])
+        mock_audio_to_attention.return_value = output
+
+        result = attention.filename_to_attention('sample.wav', start=0.5,
+            end=1.5)
+
+        self.assertTrue(result.audio_filename.endswith('sample.wav'))
+        self.assertEqual(result.start_time, 0.5)
+        self.assertEqual(result.end_time, 1.5)
 
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.load.get_model_type',

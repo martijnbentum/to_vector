@@ -4,15 +4,13 @@ import torch
 from torch.nn import functional as F
 from transformers.modeling_outputs import BaseModelOutput
 
-from . import audio
-from . import load
+from . import _spidr_util
 
 
 def audio_to_attention_outputs(audio_array, model):
     '''Extract student attentions from a SpidR model.'''
-    x = audio.standardize_audio(audio_array)
-    x = torch.as_tensor(x, dtype=torch.float32).unsqueeze(0)
-    if load.model_is_on_gpu(model): x = x.to('cuda')
+    model = _spidr_util.prepare_model(model)
+    x = _spidr_util.prepare_waveform(audio_array, model)
     with torch.no_grad():
         features = model.feature_extractor(x)
         features = model.feature_projection(features)

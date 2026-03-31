@@ -1,3 +1,4 @@
+from . import _spidr_util
 from . import audio
 from . import load
 from pathlib import Path
@@ -47,15 +48,12 @@ def _huggingface_audio_to_vector(audio_array, model, model_type,
 
 def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
     '''Convert an audio array with SpidR-specific frontend logic.'''
-    x = audio.standardize_audio(audio_array)
-    x = torch.as_tensor(x, dtype=torch.float32).unsqueeze(0)
-    if load.model_is_on_gpu(model): x = x.to('cuda')
+    x = _spidr_util.prepare_waveform(audio_array, model)
     with torch.no_grad():
         extract_features = model.feature_extractor(x)
         extract_features = model.feature_projection(extract_features)
         hidden_states = model.student.get_intermediate_outputs(
             extract_features)
-        codebook_predictions = model.get_codebooks(x)
     outputs = BaseModelOutput(
         hidden_states=tuple(hidden_states))
     outputs.extract_features = extract_features
@@ -125,6 +123,11 @@ def audio_to_cnn(audio, model=None, gpu = False, identifier = '',
     name                 An optional name to add to the output.
     '''
     model = load.prepare_model(model, gpu)
+    if load.get_model_type(model) == 'spidr':
+        raise ValueError(
+            'audio_to_cnn() is not implemented for SpidR models yet. '
+            'Check whether the convolutional frontend can be called '
+            'directly on the SpidR model.')
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
     array = audio

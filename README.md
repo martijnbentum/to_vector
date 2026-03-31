@@ -7,6 +7,7 @@ It supports:
 - convolutional feature encoder outputs
 - attention tensors
 - Wav2Vec2 codevectors and codebook indices
+- SpidR codebook probabilities, indices, and codevectors
 
 The package is designed for local scripts and research workflows where you want a
 small wrapper around Hugging Face speech checkpoints without rebuilding the
@@ -40,6 +41,7 @@ The library is built around Hugging Face models compatible with:
 - `HubertModel`
 - `WavLMModel`
 - `Wav2Vec2ForPreTraining` for codebook-related helpers
+- local `SpidR` checkpoints for SpidR-specific helpers
 
 ## Quick start
 
@@ -88,6 +90,17 @@ Extract codebook indices from a pretraining checkpoint:
 indices = to_vector.filename_to_codebook_indices("example.wav")
 ```
 
+Extract SpidR codebook indices from a local checkpoint:
+
+```python
+from to_vector import spidr_codebook
+
+indices = spidr_codebook.filename_to_codebook_indices(
+    "example.wav",
+    model="path/to/spidr-checkpoint.pt",
+)
+```
+
 ## Output shapes
 
 Exact dimensions depend on the checkpoint and input duration, but the API
@@ -102,6 +115,8 @@ returns these structures:
   returns an output object with `attentions`
 - codebook helpers
   return numpy arrays or Python index tuples derived from the quantizer
+- `spidr_codebook` helpers
+  return per-codebook numpy arrays; one array per SpidR codebook head
 
 By default, the convenience functions convert tensor outputs to numpy arrays.
 
@@ -117,6 +132,32 @@ when CUDA is not available.
 - `end` must be greater than or equal to `start`.
 - When you provide a loaded model object, the library tries to infer the correct
   feature extractor from `model.name_or_path`.
+
+## SpidR Behavior
+
+- SpidR-specific helpers standardize audio to zero mean and unit variance
+  before converting it to tensors.
+- `audio_to_vector` / `filename_to_vector` on SpidR return student hidden
+  states and projected frontend features.
+- `audio_to_attention` / `filename_to_attention` on SpidR return student
+  attention only.
+- The current local SpidR attention extraction targets the default SpidR base
+  configuration, which uses 12 transformer layers and 12 attention heads
+  according to the installed `SpidRConfig`.
+- `spidr_codebook` reads the per-codebook probability outputs from SpidR and
+  derives indices with `argmax`.
+- `audio_to_cnn` / `filename_to_cnn` are not implemented for SpidR yet.
+
+## Backend Differences
+
+- Hugging Face model families use a feature extractor loaded from the checkpoint
+  metadata; SpidR helpers call the model frontend directly.
+- Wav2Vec2 codebook helpers use quantizer codevectors from
+  `Wav2Vec2ForPreTraining`; SpidR codebook helpers live in the
+  `to_vector.spidr_codebook` module and return one array per SpidR codebook.
+- Hugging Face attention comes from the model's `output_attentions=True` path;
+  SpidR attention is computed locally from the student transformer's attention
+  projections because the upstream package does not expose attention weights.
 
 ## Public API
 
