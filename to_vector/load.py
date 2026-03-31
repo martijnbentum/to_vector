@@ -31,7 +31,7 @@ def load_model(model_name_or_path=None, cache_directory=None, gpu=False,
     config_filename=None, strict=True):
     '''Load a model and route to the correct backend by model_type.'''
     if not model_name_or_path: model_name_or_path = default_checkpoint
-    model_type = infer_model_type(model_name_or_path,
+    model_type = model_registry.filename_model_type(model_name_or_path,
         config_filename=config_filename)
     if model_type == 'spidr':
         return load_spidr_model(model_name_or_path, gpu=gpu,
@@ -81,7 +81,7 @@ def load_model_for_attention_extraction(model_name_or_path=None,
     cache_directory=None, gpu=False, config_filename=None, strict=True):
     '''Load a model for attention extraction.'''
     if not model_name_or_path: model_name_or_path = default_checkpoint
-    model_type = infer_model_type(model_name_or_path,
+    model_type = model_registry.filename_model_type(model_name_or_path,
         config_filename=config_filename)
     if model_type == 'spidr':
         return load_spidr_model(model_name_or_path, gpu=gpu,
@@ -133,7 +133,7 @@ def prepare_model(model, gpu, cache_directory=None,
         model = loader(model_name, gpu=gpu,
             cache_directory=cache_directory,
             config_filename=config_filename, strict=strict)
-    model_type = get_model_type(model)
+    model_type = model_registry.model_to_type(model)
     if model_type == 'unknown':
         m = f'WARNING: Model {type(model)} may not be supported. '
         m += 'Make sure it is one of the supported models: \n'
@@ -151,45 +151,13 @@ def prepare_model(model, gpu, cache_directory=None,
 
 def prepare_feature_extractor(model):
     '''Prepare a feature extractor for Hugging Face-style models.'''
-    if get_model_type(model) == 'spidr': return None
+    if model_registry.model_to_type(model) == 'spidr': return None
     model_name_or_path = getattr(model, 'name_or_path', None)
     if model_name_or_path:
         model_path = Path(model_name_or_path)
         if model_path.exists() or '/' in model_name_or_path:
             return load_feature_extractor(model_name_or_path)
     return load_feature_extractor()
-
-
-def infer_model_type(model_name_or_path=None, config_filename=None):
-    '''Infer model type from a local config.json file when available.'''
-    config_filename = infer_config_filename(model_name_or_path,
-        config_filename=config_filename)
-    config_dict = load_config_dict(config_filename)
-    if config_dict is None: return None
-    if 'model_type' in config_dict: return config_dict['model_type']
-    if 'run' in config_dict and 'model_type' in config_dict['run']:
-        return config_dict['run']['model_type']
-    return None
-
-
-def infer_config_filename(model_name_or_path=None, config_filename=None):
-    '''Infer the config filename for a local model path.'''
-    if config_filename is not None: return Path(config_filename)
-    if model_name_or_path is None: return None
-    path = Path(model_name_or_path)
-    if path.is_dir(): return path / 'config.json'
-    if path.is_file(): return path.parent / 'config.json'
-    return None
-
-
-def load_config_dict(config_filename):
-    '''Load a json config file into a dictionary.'''
-    if config_filename is None: return None
-    config_filename = Path(config_filename)
-    if not config_filename.exists(): return None
-    with config_filename.open() as handle:
-        return json.load(handle)
-
 
 def spidr_config_to_kwargs(config_dict):
     '''Extract SpidR config kwargs from a json dictionary.'''
@@ -204,9 +172,9 @@ def spidr_config_to_kwargs(config_dict):
 
 def load_spidr_config(checkpoint, config_filename=None):
     '''Load SpidR config from file or fall back to default SpidRConfig().'''
-    config_filename = infer_config_filename(checkpoint,
+    config_filename = model_registry.infer_config_filename(checkpoint,
         config_filename=config_filename)
-    config_dict = load_config_dict(config_filename)
+    config_dict = model_registry.load_config_dict(config_filename)
     if config_dict is None:
         warnings.warn(
             'No config.json was found for the SpidR checkpoint. '
@@ -232,10 +200,7 @@ def model_is_on_cpu(model):
 
 def model_is_spidr(model):
     '''Check whether a model is a SpidR model.'''
-    if isinstance(model, SpidR): return True
-    model_name = type(model).__name__
-    module_name = type(model).__module__
-    return model_name == 'SpidR' or module_name.startswith('spidr')
+    return model_registry.is_spidr_model(model)
 
 
 def login_huggingface(token=None):
@@ -246,17 +211,6 @@ def login_huggingface(token=None):
     return True
 
 
-def get_model_type(model):
-    '''Get the specific model family for a resolved model instance.'''
-    if model_is_spidr(model): return 'spidr'
-    if 'Wav2Vec2ForPreTraining' in type(model).__name__:
-        return 'wav2vec2-pretraining'
-    if model_registry.is_supported_model(model):
-        model_name = type(model).__name__
-        if 'Wav2Vec2' in model_name: return 'wav2vec2'
-        if 'Hubert' in model_name: return 'hubert'
-        if 'WavLM' in model_name: return 'wavlm'
-    return 'unknown'
 
 
 def move_model_to_gpu(model):

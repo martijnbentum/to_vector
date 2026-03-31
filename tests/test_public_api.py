@@ -271,7 +271,7 @@ class EntryPointTests(unittest.TestCase):
     def test_audio_to_cnn_raises_clear_error_for_spidr(self):
         with mock.patch('to_vector.to_embeddings.load.prepare_model',
             return_value=FakeSpidrModel()):
-            with mock.patch('to_vector.to_embeddings.load.get_model_type',
+            with mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
                 return_value='spidr'):
                 with self.assertRaisesRegex(
                     ValueError, 'audio_to_cnn\\(\\) is not implemented for SpidR'):
@@ -279,7 +279,7 @@ class EntryPointTests(unittest.TestCase):
                         model='checkpoint.pt')
 
     @mock.patch('to_vector.attention.load.prepare_feature_extractor')
-    @mock.patch('to_vector.attention.load.get_model_type',
+    @mock.patch('to_vector.attention.model_registry.model_to_type',
         return_value='wav2vec2')
     @mock.patch('to_vector.attention.load.prepare_model')
     def test_audio_to_attention_sets_huggingface_model_type(
@@ -300,7 +300,7 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(result.model_type, 'wav2vec2')
 
     @mock.patch('to_vector.attention.load.prepare_feature_extractor')
-    @mock.patch('to_vector.attention.load.get_model_type',
+    @mock.patch('to_vector.attention.model_registry.model_to_type',
         return_value='spidr')
     @mock.patch('to_vector.attention.load.prepare_model')
     def test_audio_to_attention_routes_spidr_without_feature_extractor(
@@ -338,7 +338,7 @@ class EntryPointTests(unittest.TestCase):
         self.assertEqual(result.end_time, 1.5)
 
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
-    @mock.patch('to_vector.to_embeddings.load.get_model_type',
+    @mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
         return_value='wav2vec2')
     @mock.patch('to_vector.to_embeddings.load.prepare_model')
     def test_audio_to_vector_removes_huggingface_last_hidden_state(
@@ -362,7 +362,7 @@ class EntryPointTests(unittest.TestCase):
 
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.audio.standardize_audio')
-    @mock.patch('to_vector.to_embeddings.load.get_model_type',
+    @mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
         return_value='spidr')
     @mock.patch('to_vector.to_embeddings.load.prepare_model')
     def test_audio_to_vector_routes_spidr_without_feature_extractor(

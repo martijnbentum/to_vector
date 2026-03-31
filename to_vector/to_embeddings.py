@@ -6,6 +6,7 @@ from transformers.modeling_outputs import BaseModelOutput
 from . import _spidr_util
 from . import audio
 from . import load
+from . import model_registry
 
 
 def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
@@ -16,9 +17,12 @@ def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
     numpify_output:  whether to convert outputs to numpy
     '''
     model = load.prepare_model(model, gpu)
-    model_type = load.get_model_type(model)
+    model_type = model_registry.model_to_type(model)
     if model_type == 'spidr':
         return _spidr_audio_to_vector(audio_array, model, numpify_output)
+    if model_type in ('wav2vec2', 'wavlm', 'hubert'):
+        return _huggingface_audio_to_vector(audio_array, model, model_type,
+            numpify_output)
     return _huggingface_audio_to_vector(audio_array, model, model_type,
         numpify_output)
 
@@ -117,7 +121,7 @@ def audio_to_cnn(audio, model=None, gpu=False, identifier='', name=''):
     name:          optional name
     '''
     model = load.prepare_model(model, gpu)
-    if load.get_model_type(model) == 'spidr':
+    if model_registry.model_to_type(model) == 'spidr':
         m = 'audio_to_cnn() is not implemented for SpidR models yet. '
         m += 'Check whether the convolutional frontend can be called '
         m += 'directly on the SpidR model.'

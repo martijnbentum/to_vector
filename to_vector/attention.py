@@ -6,6 +6,7 @@ from transformers.modeling_outputs import BaseModelOutput
 from . import _spidr_attention
 from . import audio
 from . import load
+from . import model_registry
 from .to_embeddings import add_info
 
 
@@ -21,7 +22,7 @@ def audio_to_attention(audio_array, model, gpu=False, numpify_output=True,
     average_heads:   whether to average heads
     '''
     model = load.prepare_model(model, gpu, for_attention_extraction=True)
-    model_type = load.get_model_type(model)
+    model_type = model_registry.model_to_type(model)
     if model_type == 'spidr':
         return _spidr_audio_to_attention(audio_array, model, numpify_output,
             layer, head, average_heads)
