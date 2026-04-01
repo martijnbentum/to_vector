@@ -69,6 +69,7 @@ def outputs_to_codebook_indices(outputs, model_pt):
     model_pt    is the Wav2Vec2ForPreTraining model which has the codebook
     '''
     cv = outputs_to_codevectors(outputs, model_pt)
+    if cv.ndim == 2: cv = cv[np.newaxis, ...]
     codebook = load_codebook(model_pt)
     ci = codevectors_to_codebook_indices(cv, codebook)
     return ci

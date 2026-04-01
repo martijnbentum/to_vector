@@ -1,0 +1,105 @@
+import json
+import tempfile
+from pathlib import Path
+from types import SimpleNamespace
+import unittest
+from unittest import mock
+
+import numpy as np
+
+import to_vector
+from to_vector import load
+
+from tests.test_helpers import DeviceModel
+
+
+class LoadTests(unittest.TestCase):
+    @mock.patch('to_vector.load.AutoModel.from_pretrained')
+    @mock.patch('to_vector.load.torch.cuda.is_available', return_value=False)
+    def test_load_model_does_not_force_cuda_when_unavailable(
+        self, mock_cuda, mock_from_pretrained
+    ):
+        model = DeviceModel(device_type='cpu')
+        mock_from_pretrained.return_value = model
+
+        loaded = load.load_model('repo/model', gpu=True)
+
+        self.assertIs(loaded, model)
+        self.assertEqual(model.moves, [])
+
+    @mock.patch('to_vector.load.load_feature_extractor')
+    def test_prepare_feature_extractor_uses_model_name_or_path(
+        self, mock_load_feature_extractor
+    ):
+        feature_extractor = mock.Mock()
+        mock_load_feature_extractor.return_value = feature_extractor
+        model = DeviceModel()
+        model.name_or_path = 'custom/repo'
+
+        resolved_feature_extractor = load.prepare_feature_extractor(model)
+
+        self.assertIs(resolved_feature_extractor, feature_extractor)
+        mock_load_feature_extractor.assert_called_once_with('custom/repo')
+
+    @mock.patch('to_vector.load.load_spidr_model')
+    def test_load_model_routes_local_spidr_configs(self, mock_load_spidr_model):
+        mock_load_spidr_model.return_value = DeviceModel()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            checkpoint = Path(tmpdir) / 'model.pt'
+            checkpoint.write_bytes(b'checkpoint')
+            config_filename = Path(tmpdir) / 'config.json'
+            config_filename.write_text(json.dumps({'model_type': 'spidr'}))
+
+            loaded = load.load_model(str(checkpoint))
+
+        self.assertIs(loaded, mock_load_spidr_model.return_value)
+        mock_load_spidr_model.assert_called_once_with(
+            str(checkpoint),
+            gpu=False,
+            config_filename=None,
+            strict=True,
+        )
+
+    def test_load_audio_allows_zero_length_slice(self):
+        mock_librosa = SimpleNamespace(
+            load=mock.Mock(return_value=(np.array([0.1]), 16000))
+        )
+        with mock.patch('to_vector.audio.librosa', mock_librosa):
+            audio = load.load_audio('sample.wav', start=0.0, end=0.0)
+
+        np.testing.assert_array_equal(audio, np.array([0.1]))
+        mock_librosa.load.assert_called_once_with(
+            'sample.wav', sr=0.0 + 16000, offset=0.0, duration=0.0
+        )
+
+    def test_load_audio_rejects_end_before_start(self):
+        with self.assertRaisesRegex(
+            ValueError, 'end must be greater than or equal to start'
+        ):
+            load.load_audio('sample.wav', start=2.0, end=1.0)
+
+    def test_standardize_audio_returns_zero_mean_unit_variance(self):
+        audio = to_vector.standardize_audio(np.array([1.0, 2.0, 3.0]))
+
+        self.assertAlmostEqual(float(audio.mean()), 0.0, places=6)
+        self.assertAlmostEqual(float(audio.std()), 1.0, places=6)
+
+    def test_prepare_feature_extractor_returns_none_for_spidr(self):
+        model = mock.Mock()
+
+        with mock.patch('to_vector.load.model_registry.model_to_type',
+            return_value='spidr'):
+            feature_extractor = load.prepare_feature_extractor(model)
+
+        self.assertIsNone(feature_extractor)
+
+    def test_spidr_config_to_kwargs_returns_nested_model_section(self):
+        config_dict = {'model': {'n_layers': 12}, 'run': {'seed': 1}}
+
+        kwargs = load.spidr_config_to_kwargs(config_dict)
+
+        self.assertEqual(kwargs, {'n_layers': 12})
+
+
+if __name__ == '__main__':
+    unittest.main()
