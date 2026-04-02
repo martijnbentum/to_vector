@@ -9,6 +9,7 @@ from transformers import AutoFeatureExtractor
 from transformers import AutoModel
 from transformers import AutoModelForPreTraining
 from transformers import AutoProcessor
+from transformers import Wav2Vec2FeatureExtractor
 from spidr.config import SpidRConfig
 from spidr.models import SpidR
 
@@ -115,7 +116,19 @@ def load_feature_extractor(model_name_or_path=None):
     model_name_or_path:  Hugging Face repo id or local path
     '''
     if model_name_or_path is None: model_name_or_path = default_checkpoint
-    return AutoFeatureExtractor.from_pretrained(model_name_or_path)
+    try: return AutoFeatureExtractor.from_pretrained(model_name_or_path)
+    except OSError as e:
+        m = f'WARNING: Could not load feature extractor from:\n'
+        m += f'{model_name_or_path}\n'
+        m += 'missing a preprocessor_config.json file'
+        m += '\nFalling back to default Wav2Vec2 feature extractor.'
+        return _make_feature_extractor()
+
+def _make_feature_extractor():
+    feature_extractor = Wav2Vec2FeatureExtractor(feature_size=1, 
+        sampling_rate=16000, padding_value=0.0, do_normalize=True, 
+        return_attention_mask=True)
+    return feature_extractor
 
 
 def prepare_model(model, gpu, cache_directory=None,
