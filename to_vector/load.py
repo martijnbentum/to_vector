@@ -45,6 +45,7 @@ def load_huggingface_model(model_name_or_path=None, cache_directory=None,
     '''Load a Hugging Face speech model.'''
     if not model_name_or_path: model_name_or_path = default_checkpoint
     if not cache_directory: cache_directory = default_cache_directory
+    print(f'Loading model {model_name_or_path} ')
     model = AutoModel.from_pretrained(model_name_or_path,
         cache_dir=cache_directory)
     if gpu: model = move_model_to_gpu(model)
