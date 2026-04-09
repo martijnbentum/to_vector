@@ -17,7 +17,7 @@ def load_audio(filename, start=0.0, end=None):
 def load_audio_milliseconds(filename, start=0, end=None):
     if isinstance(start, float) or isinstance(end, float):
         m = 'start and end must be integers representing milliseconds'
-        raise typeError(m)
+        raise TypeError(m)
     start_sec = start / 1000
     end_sec = None if end is None else end / 1000
     audio = load_audio(filename, start_sec, end_sec)
