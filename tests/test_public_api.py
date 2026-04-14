@@ -9,15 +9,18 @@ class PublicApiTests(unittest.TestCase):
             'audio_to_vector',
             'filename_to_vector',
             'audio_to_attention',
+            'audio_to_codebook_artifacts',
             'filename_to_attention',
             'audio_to_codebook_indices',
             'filename_to_codebook_indices',
+            'filename_to_codebook_artifacts',
             'load_audio',
             'load_feature_extractor',
             'load_model',
             'load_model_pt',
             'load_spidr_model',
             'standardize_audio',
+            'CodebookArtifacts',
         ]:
             self.assertTrue(hasattr(to_vector, name), name)
 
