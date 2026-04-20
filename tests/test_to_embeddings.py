@@ -6,6 +6,9 @@ import torch
 from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
+import to_vector.batch_helper as batch_helper
+import to_vector.hf_batch_helper as hf_batch_helper
+import to_vector.spidr_batch_helper as spidr_batch_helper
 
 from tests.test_helpers import FakeHuggingFaceModel
 from tests.test_helpers import FakeSpidrModel
@@ -33,6 +36,7 @@ class ToEmbeddingsTests(unittest.TestCase):
             gpu=True,
             identifiers=['id-a', 'id-b'],
             names=['name-a', 'name-b'],
+            batch_minutes=2.5,
         )
 
         self.assertEqual(len(outputs), 2)
@@ -43,7 +47,7 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertEqual(starts, [0.0, 1.5])
         self.assertEqual(ends, [0.5, None])
         mock_audio_batch_to_vector.assert_called_once_with(
-            mock_load_audio_batch.return_value, 'repo/model', True, True)
+            mock_load_audio_batch.return_value, 'repo/model', True, True, 2.5)
         self.assertTrue(outputs[0].audio_filename.endswith('/a.wav'))
         self.assertEqual(outputs[0].start_time, 0.0)
         self.assertEqual(outputs[0].end_time, 0.5)
@@ -64,13 +68,30 @@ class ToEmbeddingsTests(unittest.TestCase):
                 identifiers=['id-a'],
             )
 
-    @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
-    @mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
-        return_value='wav2vec2')
-    @mock.patch('to_vector.to_embeddings.load.prepare_model')
-    def test_audio_batch_to_vector_splits_huggingface_batch_outputs(
-        self, mock_prepare_model, mock_get_model_type,
-        mock_prepare_feature_extractor
+    @mock.patch('to_vector.to_embeddings.batch_helper.handle_batch')
+    def test_audio_batch_to_vector_delegates_to_batch_helper(
+        self, mock_handle_batch
+    ):
+        mock_handle_batch.return_value = ['a', 'b']
+
+        outputs = to_vector.audio_batch_to_vector(
+            [np.array([1.0]), np.array([2.0])],
+            model='repo/model',
+            gpu=True,
+            numpify_output=False,
+            batch_minutes=1.5,
+        )
+
+        self.assertEqual(outputs, ['a', 'b'])
+        mock_handle_batch.assert_called_once()
+        args = mock_handle_batch.call_args[0]
+        self.assertEqual(args[1:], ('repo/model', True, False, 1.5))
+        self.assertEqual(len(args[0]), 2)
+        self.assertEqual(args[0][0].tolist(), [1.0])
+
+    @mock.patch('to_vector.hf_batch_helper.load.prepare_feature_extractor')
+    def test_hf_batch_helper_splits_huggingface_batch_outputs(
+        self, mock_prepare_feature_extractor
     ):
         outputs = BaseModelOutput(
             last_hidden_state=torch.tensor([
@@ -101,13 +122,12 @@ class ToEmbeddingsTests(unittest.TestCase):
                 [1, 1, 1],
             ]),
         })
-        mock_prepare_model.return_value = model
         mock_prepare_feature_extractor.return_value = feature_extractor
 
-        result = to_vector.audio_batch_to_vector([
+        result = hf_batch_helper.audio_batch_to_outputs([
             np.array([1.0, 2.0]),
             np.array([3.0, 4.0, 5.0]),
-        ], model='repo/model', numpify_output=False)
+        ], model, 'wav2vec2')
 
         self.assertEqual(len(result), 2)
         feature_extractor.assert_called_once()
@@ -118,23 +138,18 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertEqual(tuple(result[0].extract_features.shape), (1, 2, 1))
         self.assertEqual(tuple(result[1].extract_features.shape), (1, 3, 1))
 
-    @mock.patch('to_vector.to_embeddings.audio.standardize_audio')
-    @mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
-        return_value='spidr')
-    @mock.patch('to_vector.to_embeddings.load.prepare_model')
-    def test_audio_batch_to_vector_batches_spidr_outputs(
-        self, mock_prepare_model, mock_get_model_type, mock_standardize_audio
+    @mock.patch('to_vector.spidr_batch_helper.audio.standardize_audio')
+    def test_spidr_batch_helper_batches_spidr_outputs(
+        self, mock_standardize_audio
     ):
         model = FakeSpidrModel()
-        mock_prepare_model.return_value = model
         mock_standardize_audio.side_effect = lambda value: value
 
-        result = to_vector.audio_batch_to_vector([
+        result = spidr_batch_helper.audio_batch_to_outputs([
             np.array([1.0, 2.0]),
             np.array([4.0, 5.0, 6.0]),
-        ], model='checkpoint.pt')
+        ], model)
 
-        mock_prepare_model.assert_called_once_with('checkpoint.pt', False)
         self.assertEqual(len(model.student.calls), 1)
         attention_mask = model.student.calls[0]['attention_mask']
         self.assertEqual(tuple(attention_mask.shape), (2, 1, 2, 2))
@@ -145,6 +160,98 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertEqual(tuple(result[1].hidden_states[0].shape), (1, 2, 2))
         self.assertEqual(tuple(result[0].extract_features.shape), (1, 1, 2))
         self.assertEqual(tuple(result[1].extract_features.shape), (1, 2, 2))
+
+    @mock.patch('to_vector.batch_helper.single_batch_to_outputs')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_batch_helper_splits_multiple_batches_and_preserves_order(
+        self, mock_prepare_model, mock_get_model_type,
+        mock_single_batch_to_outputs
+    ):
+        model = FakeHuggingFaceModel(BaseModelOutput(hidden_states=()))
+        mock_prepare_model.return_value = model
+        mock_single_batch_to_outputs.side_effect = [
+            ['a', 'b'],
+            ['c'],
+        ]
+        batch_minutes = 4 / batch_helper.sample_rate / 60
+
+        result = batch_helper.handle_batch([
+            np.array([1.0, 2.0]),
+            np.array([3.0, 4.0]),
+            np.array([5.0, 6.0]),
+        ], model='repo/model', batch_minutes=batch_minutes,
+            numpify_output=False)
+
+        self.assertEqual(result, ['a', 'b', 'c'])
+        self.assertEqual(mock_single_batch_to_outputs.call_count, 2)
+        first_batch = mock_single_batch_to_outputs.call_args_list[0].args[0]
+        second_batch = mock_single_batch_to_outputs.call_args_list[1].args[0]
+        self.assertEqual([len(item) for item in first_batch], [2, 2])
+        self.assertEqual([len(item) for item in second_batch], [2])
+
+    @mock.patch('to_vector.batch_helper.batch_minutes_to_samples')
+    @mock.patch('to_vector.batch_helper.single_batch_to_outputs')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.model_is_on_gpu',
+        return_value=True)
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_batch_helper_uses_gpu_default_batch_minutes(
+        self, mock_prepare_model, mock_model_is_on_gpu, mock_get_model_type,
+        mock_single_batch_to_outputs, mock_batch_minutes_to_samples
+    ):
+        model = FakeHuggingFaceModel(BaseModelOutput(hidden_states=()))
+        mock_prepare_model.return_value = model
+        mock_batch_minutes_to_samples.return_value = 999999
+        mock_single_batch_to_outputs.return_value = ['a']
+
+        batch_helper.handle_batch([np.array([1.0])], model='repo/model',
+            numpify_output=False)
+
+        mock_batch_minutes_to_samples.assert_called_once_with(
+            batch_helper.default_gpu_batch_minutes)
+
+    @mock.patch('to_vector.batch_helper.batch_minutes_to_samples')
+    @mock.patch('to_vector.batch_helper.single_batch_to_outputs')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.model_is_on_gpu',
+        return_value=False)
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_batch_helper_uses_cpu_default_batch_minutes(
+        self, mock_prepare_model, mock_model_is_on_gpu, mock_get_model_type,
+        mock_single_batch_to_outputs, mock_batch_minutes_to_samples
+    ):
+        model = FakeHuggingFaceModel(BaseModelOutput(hidden_states=()))
+        mock_prepare_model.return_value = model
+        mock_batch_minutes_to_samples.return_value = 999999
+        mock_single_batch_to_outputs.return_value = ['a']
+
+        batch_helper.handle_batch([np.array([1.0])], model='repo/model',
+            numpify_output=False)
+
+        mock_batch_minutes_to_samples.assert_called_once_with(
+            batch_helper.default_cpu_batch_minutes)
+
+    def test_batch_helper_rejects_nonpositive_batch_minutes(self):
+        model = FakeHuggingFaceModel(BaseModelOutput(hidden_states=()))
+
+        with self.assertRaisesRegex(
+            ValueError, 'batch_minutes must be greater than zero'
+        ):
+            batch_helper.resolve_batch_minutes(model, 0.0)
+
+    def test_batch_helper_keeps_single_large_item_in_its_own_batch(self):
+        batches = list(batch_helper.split_audio_arrays([
+            np.array([1.0, 2.0]),
+            np.array([3.0, 4.0, 5.0, 6.0, 7.0]),
+            np.array([8.0, 9.0]),
+        ], max_samples=3))
+
+        self.assertEqual([len(batch) for batch in batches], [1, 1, 1])
+        self.assertEqual([len(batch[0]) for batch in batches], [2, 5, 2])
 
     def test_audio_to_cnn_raises_clear_error_for_spidr(self):
         with mock.patch('to_vector.to_embeddings.load.prepare_model',
