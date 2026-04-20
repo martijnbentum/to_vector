@@ -33,6 +33,9 @@ For development:
 pip install -e .[dev]
 ```
 
+This keeps editable-install metadata in `.build/` instead of creating
+`*.egg-info` at the repository root.
+
 ## Supported model families
 
 The library is built around Hugging Face models compatible with:

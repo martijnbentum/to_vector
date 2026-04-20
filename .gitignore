@@ -215,3 +215,7 @@ __marimo__/
 
 # Local agent instructions
 agents.md
+
+# Local notes and tooling
+docs/NOTE_spidr_batch_embeddings_2026-04-19.md
+setup.cfg

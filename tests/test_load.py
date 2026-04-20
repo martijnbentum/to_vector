@@ -78,6 +78,97 @@ class LoadTests(unittest.TestCase):
         ):
             load.load_audio('sample.wav', start=2.0, end=1.0)
 
+    @mock.patch('to_vector.audio.load_audio')
+    def test_load_audio_batch_loads_each_segment(self, mock_load_audio):
+        mock_load_audio.side_effect = [
+            np.array([1.0, 2.0]),
+            np.array([3.0]),
+        ]
+
+        result = to_vector.load_audio_batch(
+            ['a.wav', 'b.wav'],
+            starts=[0.0, 1.5],
+            ends=[1.0, None],
+        )
+
+        self.assertEqual(len(result), 2)
+        np.testing.assert_array_equal(result[0], np.array([1.0, 2.0]))
+        np.testing.assert_array_equal(result[1], np.array([3.0]))
+        mock_load_audio.assert_has_calls([
+            mock.call('a.wav', 0.0, 1.0),
+            mock.call('b.wav', 1.5, None),
+        ])
+
+    @mock.patch('to_vector.audio.load_audio')
+    def test_load_audio_batch_defaults_times(self, mock_load_audio):
+        mock_load_audio.side_effect = [np.array([1.0]), np.array([2.0])]
+
+        to_vector.load_audio_batch(['a.wav', 'b.wav'])
+
+        mock_load_audio.assert_has_calls([
+            mock.call('a.wav', 0.0, None),
+            mock.call('b.wav', 0.0, None),
+        ])
+
+    def test_load_audio_batch_rejects_empty_filenames(self):
+        with self.assertRaisesRegex(
+            ValueError, 'filenames must contain at least one filename'
+        ):
+            to_vector.load_audio_batch([])
+
+    def test_load_audio_batch_rejects_mismatched_time_lengths(self):
+        with self.assertRaisesRegex(
+            ValueError, 'starts must have the same length as filenames'
+        ):
+            to_vector.load_audio_batch(['a.wav', 'b.wav'], starts=[0.0])
+
+        with self.assertRaisesRegex(
+            ValueError, 'ends must have the same length as filenames'
+        ):
+            to_vector.load_audio_batch(['a.wav', 'b.wav'], ends=[1.0])
+
+    @mock.patch('to_vector.audio.load_audio_batch')
+    def test_load_audio_batch_milliseconds_converts_and_delegates(
+        self, mock_load_audio_batch
+    ):
+        mock_load_audio_batch.return_value = [np.array([1.0])]
+
+        result = to_vector.load_audio_batch_milliseconds(
+            ['a.wav'],
+            starts=[250],
+            ends=[1250],
+        )
+
+        self.assertEqual(len(result), 1)
+        mock_load_audio_batch.assert_called_once_with(
+            ['a.wav'],
+            [0.25],
+            [1.25],
+        )
+
+    @mock.patch('to_vector.audio.load_audio_batch')
+    def test_load_audio_batch_milliseconds_defaults_times(
+        self, mock_load_audio_batch
+    ):
+        mock_load_audio_batch.return_value = [np.array([1.0]), np.array([2.0])]
+
+        to_vector.load_audio_batch_milliseconds(['a.wav', 'b.wav'])
+
+        mock_load_audio_batch.assert_called_once_with(
+            ['a.wav', 'b.wav'],
+            [0.0, 0.0],
+            [None, None],
+        )
+
+    def test_load_audio_batch_milliseconds_rejects_float_times(self):
+        with self.assertRaisesRegex(
+            TypeError, 'start and end must be integers representing milliseconds'
+        ):
+            to_vector.load_audio_batch_milliseconds(
+                ['a.wav'],
+                starts=[0.5],
+            )
+
     def test_standardize_audio_returns_zero_mean_unit_variance(self):
         audio = to_vector.standardize_audio(np.array([1.0, 2.0, 3.0]))
 
