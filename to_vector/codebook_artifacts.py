@@ -67,10 +67,9 @@ def _audio_to_wav2vec2_codebook_artifacts(audio_array, model, gpu):
 
 def _audio_to_spidr_codebook_artifacts(audio_array, model, gpu):
     resolved_model = _spidr_util.prepare_model(model, gpu)
-    per_head = spidr_codebook.audio_to_codebook_indices(audio_array,
+    indices = spidr_codebook.audio_to_codebook_indices(audio_array,
         model=resolved_model, gpu=False)
-    indices = np.stack([np.asarray(item, dtype=int) for item in per_head],
-        axis=-1)
+    indices = np.asarray(indices, dtype=int)
     codebook_matrix = np.stack([
         np.asarray(matrix) for matrix in spidr_codebook.load_codebooks(
             resolved_model)

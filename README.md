@@ -129,6 +129,17 @@ indices = spidr_codebook.filename_to_codebook_indices(
 )
 ```
 
+Extract batched SpidR codebook indices from a local checkpoint:
+
+```python
+from to_vector import spidr_codebook
+
+items = spidr_codebook.filename_batch_to_codebook_indices(
+    ["example-a.wav", "example-b.wav"],
+    model="path/to/spidr-checkpoint.pt",
+)
+```
+
 ## Output shapes
 
 Exact dimensions depend on the checkpoint and input duration, but the API
@@ -144,7 +155,8 @@ returns these structures:
 - codebook helpers
   return numpy arrays or Python index tuples derived from the quantizer
 - `spidr_codebook` helpers
-  return per-codebook numpy arrays; one array per SpidR codebook head
+  return numpy arrays shaped like `(frames, codebooks)` for indices and
+  `(frames, codebooks, codebook_size)` for probabilities
 
 By default, the convenience functions convert tensor outputs to numpy arrays.
 
@@ -173,7 +185,8 @@ when CUDA is not available.
   configuration, which uses 12 transformer layers and 12 attention heads
   according to the installed `SpidRConfig`.
 - `spidr_codebook` reads the per-codebook probability outputs from SpidR and
-  derives indices with `argmax`.
+  derives indices with `argmax`, returning one codebook column per selected
+  SpidR layer.
 - `audio_to_cnn` / `filename_to_cnn` are not implemented for SpidR yet.
 
 ## Backend Differences
@@ -182,7 +195,7 @@ when CUDA is not available.
   metadata; SpidR helpers call the model frontend directly.
 - Wav2Vec2 codebook helpers use quantizer codevectors from
   `Wav2Vec2ForPreTraining`; SpidR codebook helpers live in the
-  `to_vector.spidr_codebook` module and return one array per SpidR codebook.
+  `to_vector.spidr_codebook` module and return dense frame-by-codebook arrays.
 - Hugging Face attention comes from the model's `output_attentions=True` path;
   SpidR attention is computed locally from the student transformer's attention
   projections because the upstream package does not expose attention weights.

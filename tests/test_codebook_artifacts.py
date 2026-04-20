@@ -30,10 +30,10 @@ class CodebookArtifactsTests(unittest.TestCase):
         with mock.patch.object(codebook_artifacts._spidr_util,
             'prepare_model', return_value=fake_model), mock.patch.object(
             codebook_artifacts.spidr_codebook, 'audio_to_codebook_indices',
-            return_value=[
-                np.array([1, 0]),
-                np.array([0, 1]),
-            ]), mock.patch.object(
+            return_value=np.array([
+                [1, 0],
+                [0, 1],
+            ])), mock.patch.object(
             codebook_artifacts.spidr_codebook, 'load_codebooks',
             return_value=[
                 np.array([[1.0], [2.0]]),
