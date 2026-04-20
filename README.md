@@ -140,6 +140,30 @@ items = spidr_codebook.filename_batch_to_codebook_indices(
 )
 ```
 
+Extract SpidR codebook probabilities from a local checkpoint:
+
+```python
+from to_vector import spidr_codebook
+
+probabilities = spidr_codebook.filename_to_codebook_probabilities(
+    "example.wav",
+    model="path/to/spidr-checkpoint.pt",
+)
+```
+
+Extract batched SpidR codevectors for timed segments:
+
+```python
+from to_vector import spidr_codebook
+
+codevectors = spidr_codebook.filename_batch_to_codevectors(
+    ["example-a.wav", "example-b.wav"],
+    starts=[0.0, 1.5],
+    ends=[0.8, 2.1],
+    model="path/to/spidr-checkpoint.pt",
+)
+```
+
 ## Output shapes
 
 Exact dimensions depend on the checkpoint and input duration, but the API
