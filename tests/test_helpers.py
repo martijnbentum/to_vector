@@ -1,7 +1,9 @@
+from types import SimpleNamespace
+from unittest import mock
+
 import numpy as np
 import torch
 from torch import nn
-from unittest import mock
 
 
 class DummyModel:
@@ -33,11 +35,19 @@ class DeviceModel(DummyModel):
 
 
 class FakeSpidrModule:
-    def __init__(self, outputs):
-        self.outputs = outputs
+    def __init__(self, offset=0.0):
+        self.offset = offset
+        self.calls = []
 
-    def get_intermediate_outputs(self, features):
-        return self.outputs
+    def get_intermediate_outputs(self, features, attention_mask=None):
+        self.calls.append({
+            'features': features,
+            'attention_mask': attention_mask,
+        })
+        return [
+            features + self.offset + 2.0,
+            features + self.offset + 4.0,
+        ]
 
 
 class FakeSpidrModel(DeviceModel):
@@ -46,19 +56,19 @@ class FakeSpidrModel(DeviceModel):
     def __init__(self):
         super().__init__(device_type='cpu')
         self.base_model_prefix = 'spidr'
-        self.feature_extractor = mock.Mock(
-            return_value=torch.tensor([[[1.0, 2.0]]]))
+        self.feature_extractor = mock.Mock(side_effect=self._extract_features)
+        self.feature_extractor.conv_layers = [
+            SimpleNamespace(kernel_size=1, stride=2),
+        ]
         self.feature_projection = mock.Mock(
             side_effect=lambda value: value + 1.0)
-        self.student = FakeSpidrModule([
-            torch.tensor([[[3.0, 4.0]]]),
-            torch.tensor([[[5.0, 6.0]]]),
-        ])
-        self.teacher = FakeSpidrModule([
-            torch.tensor([[[7.0, 8.0]]]),
-        ])
+        self.student = FakeSpidrModule()
+        self.teacher = FakeSpidrModule(offset=10.0)
         self.get_codebooks = mock.Mock(
             return_value=[torch.tensor([[[9.0, 10.0]]])])
+
+    def _extract_features(self, waveforms):
+        return waveforms.unsqueeze(-1).repeat(1, 1, 2)
 
 
 class FakeHuggingFaceModel(DeviceModel):

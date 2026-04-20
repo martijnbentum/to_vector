@@ -7,6 +7,7 @@ class PublicApiTests(unittest.TestCase):
     def test_public_api_exports_main_helpers(self):
         for name in [
             'audio_to_vector',
+            'filename_batch_to_vector',
             'filename_to_vector',
             'audio_to_attention',
             'audio_to_codebook_artifacts',
@@ -15,6 +16,9 @@ class PublicApiTests(unittest.TestCase):
             'filename_to_codebook_indices',
             'filename_to_codebook_artifacts',
             'load_audio',
+            'load_audio_batch',
+            'load_audio_batch_milliseconds',
+            'load_audio_milliseconds',
             'load_feature_extractor',
             'load_model',
             'load_model_pt',
