@@ -28,14 +28,14 @@ default_checkpoint = wav2vec2_base
 
 
 def load_model(model_name_or_path=None, cache_directory=None, gpu=False,
-    config_filename=None, strict=True):
+    config_filename=None):
     '''Load a model and route to the correct backend by model_type.'''
     if not model_name_or_path: model_name_or_path = default_checkpoint
     model_type = model_registry.filename_model_type(model_name_or_path,
         config_filename=config_filename)
     if model_type == 'spidr':
         return load_spidr_model(model_name_or_path, gpu=gpu,
-            config_filename=config_filename, strict=strict)
+            config_filename=config_filename)
     return load_huggingface_model(model_name_or_path,
         cache_directory=cache_directory, gpu=gpu)
 
@@ -52,8 +52,7 @@ def load_huggingface_model(model_name_or_path=None, cache_directory=None,
     return model
 
 
-def load_spidr_model(checkpoint, gpu=False, config_filename=None,
-    strict=True):
+def load_spidr_model(checkpoint, gpu=False, config_filename=None):
     '''Load a SpidR model from a local checkpoint.'''
     if checkpoint is None:
         raise ValueError('checkpoint is required for SpidR models')
@@ -64,7 +63,7 @@ def load_spidr_model(checkpoint, gpu=False, config_filename=None,
         weights_only=True)
     if 'model' in checkpoint_data: state_dict = checkpoint_data['model']
     else: state_dict = checkpoint_data
-    model.load_state_dict(state_dict, strict=strict)
+    model.load_state_dict(state_dict, strict=True)
     model.name_or_path = str(checkpoint)
     if gpu: model = move_model_to_gpu(model)
     return model
@@ -79,14 +78,14 @@ def load_model_pt(checkpoint=None, gpu=False):
 
 
 def load_model_for_attention_extraction(model_name_or_path=None,
-    cache_directory=None, gpu=False, config_filename=None, strict=True):
+    cache_directory=None, gpu=False, config_filename=None):
     '''Load a model for attention extraction.'''
     if not model_name_or_path: model_name_or_path = default_checkpoint
     model_type = model_registry.filename_model_type(model_name_or_path,
         config_filename=config_filename)
     if model_type == 'spidr':
         return load_spidr_model(model_name_or_path, gpu=gpu,
-            config_filename=config_filename, strict=strict)
+            config_filename=config_filename)
     if not cache_directory: cache_directory = default_cache_directory
     model = AutoModel.from_pretrained(model_name_or_path,
         cache_dir=cache_directory, attn_implementation='eager')
@@ -133,7 +132,7 @@ def _make_feature_extractor():
 
 
 def prepare_model(model, gpu, cache_directory=None,
-    for_attention_extraction=False, config_filename=None, strict=True):
+    for_attention_extraction=False, config_filename=None):
     '''Prepare a model from an instance, local path, repo id, or None.'''
     if for_attention_extraction: loader = load_model_for_attention_extraction
     else: loader = load_model
@@ -141,11 +140,11 @@ def prepare_model(model, gpu, cache_directory=None,
     if isinstance(model, (str, Path)): model_name = str(model)
     if model is None:
         model = loader(gpu=gpu, cache_directory=cache_directory,
-            config_filename=config_filename, strict=strict)
+            config_filename=config_filename)
     elif model_name is not None:
         model = loader(model_name, gpu=gpu,
             cache_directory=cache_directory,
-            config_filename=config_filename, strict=strict)
+            config_filename=config_filename)
     model_type = model_registry.model_to_type(model)
     if model_type == 'unknown':
         m = f'WARNING: Model {type(model)} may not be supported. '
