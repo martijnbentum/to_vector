@@ -12,7 +12,6 @@ from .codebook_artifacts import (
 from .load import default_checkpoint, load_feature_extractor, load_model
 from .load import load_model_pt, load_spidr_model
 from .to_embeddings import (
-    audio_batch_to_vector,
     audio_to_cnn,
     audio_to_vector,
     filename_batch_to_vector,
@@ -26,7 +25,6 @@ from .wav2vec2_codebook import filename_to_codevectors
 
 __all__ = [
     'audio_to_attention',
-    'audio_batch_to_vector',
     'audio_to_codebook_artifacts',
     'audio_to_cnn',
     'audio_to_codebook_indices',

@@ -6,54 +6,79 @@ from . import model_registry
 from . import spidr_batch_helper
 
 sample_rate = 16_000
-default_gpu_batch_minutes = 10.0
-default_cpu_batch_minutes = 200.0
+reserved_gpu_gb = 1.0
+free_gpu_gb = 1.0
+estimated_embedding_mb_per_second = 2.0
+embedding_safety_factor = 4.0
 
 
 def handle_batch(audio_arrays, model=None, gpu=False, numpify_output=True,
-    batch_minutes=None):
+    batch_size=None):
     '''Run batched embedding extraction with multi-batch coordination.'''
     model = load.prepare_model(model, gpu)
     model_type = model_registry.model_to_type(model)
-    batch_minutes = resolve_batch_minutes(model, batch_minutes)
-    max_samples = batch_minutes_to_samples(batch_minutes)
+    batches = split_audio_arrays(audio_arrays, batch_size=batch_size)
     items = []
-    for batch_audio_arrays in split_audio_arrays(audio_arrays, max_samples):
+    for batch_audio_arrays in batches:
         outputs = single_batch_to_outputs(batch_audio_arrays, model, model_type)
         if numpify_output:
             outputs = [numpify(item) for item in outputs]
         items.extend(outputs)
     return items
 
+def compute_embedding_batch_size(n_items, length_seconds, gpu_size_gb,
+    batch_size=None):
+    '''Resolve a defensive embedding batch size from coarse GPU limits.'''
+    n_items = int(n_items)
+    if n_items <= 0:
+        raise ValueError('n_items must be greater than zero')
+    length_seconds = float(length_seconds)
+    if length_seconds <= 0:
+        raise ValueError('length_seconds must be greater than zero')
+    gpu_size_gb = float(gpu_size_gb)
+    if gpu_size_gb <= 0:
+        raise ValueError('gpu_size_gb must be greater than zero')
+    if batch_size is not None:
+        batch_size = int(batch_size)
+        if batch_size <= 0:
+            raise ValueError('batch_size must be greater than zero')
+        batch_size = min(batch_size, n_items)
+        print(f'embedding batch size: {batch_size} items (explicit)')
+        return batch_size
+    usable_gb = max(1.0, gpu_size_gb - reserved_gpu_gb - free_gpu_gb)
+    usable_bytes = usable_gb * (1024 ** 3)
+    item_bytes = (
+        length_seconds * estimated_embedding_mb_per_second *
+        embedding_safety_factor * (1024 ** 2)
+    )
+    item_count = int(usable_bytes // item_bytes)
+    item_count = max(1, min(n_items, item_count))
+    m = f'embedding batch size: {item_count} items '
+    m += f'(estimated from {gpu_size_gb:g} GB GPU, '
+    m += f'{length_seconds:.2f}s/item)'
+    print(m)
+    return item_count
 
-def resolve_batch_minutes(model, batch_minutes):
-    '''Resolve the batch budget in minutes from input or device defaults.'''
-    if batch_minutes is None:
-        if load.model_is_on_gpu(model):
-            return default_gpu_batch_minutes
-        return default_cpu_batch_minutes
-    if batch_minutes <= 0:
-        raise ValueError('batch_minutes must be greater than zero')
-    return float(batch_minutes)
+
+def split_audio_arrays(audio_arrays, batch_size=None):
+    '''Split audio arrays into fixed-size batches.'''
+    if batch_size is None:
+        yield list(audio_arrays)
+        return
+    yield from split_audio_arrays_by_count(audio_arrays, batch_size)
 
 
-def batch_minutes_to_samples(batch_minutes):
-    '''Convert batch minutes to a sample budget at 16 kHz.'''
-    return int(batch_minutes * 60 * sample_rate)
-
-
-def split_audio_arrays(audio_arrays, max_samples):
-    '''Split audio arrays into batches by total sample count.'''
+def split_audio_arrays_by_count(audio_arrays, batch_size):
+    '''Split audio arrays into fixed-size batches.'''
+    batch_size = int(batch_size)
+    if batch_size <= 0:
+        raise ValueError('batch_size must be greater than zero')
     batch = []
-    batch_total = 0
     for audio_array in audio_arrays:
-        item_size = int(len(audio_array))
-        if batch and batch_total + item_size > max_samples:
+        batch.append(audio_array)
+        if len(batch) == batch_size:
             yield batch
             batch = []
-            batch_total = 0
-        batch.append(audio_array)
-        batch_total += item_size
     if batch:
         yield batch
 

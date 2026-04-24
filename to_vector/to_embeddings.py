@@ -30,7 +30,7 @@ def filename_to_vector(audio_filename, start=0.0, end=None, model=None,
 
 def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     model=None, gpu=False, identifiers=None, names=None,
-    numpify_output=True, batch_minutes=None):
+    numpify_output=True, batch_size=None):
     '''Convert multiple audio files to embeddings.
     audio_filenames: sequence of audio file paths
     starts:          optional sequence of segment starts in seconds
@@ -40,7 +40,7 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     identifiers:     optional sequence of identifiers
     names:           optional sequence of names
     numpify_output:  whether to convert outputs to numpy
-    batch_minutes:   batch budget in minutes
+    batch_size:      optional item count per batch
     '''
     audio_filenames = [Path(filename).resolve() for filename in audio_filenames]
     if not audio_filenames:
@@ -51,8 +51,8 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
         'identifiers')
     names = _resolve_batch_values(names, len(audio_filenames), '', 'names')
     arrays = audio.load_audio_batch(audio_filenames, starts, ends)
-    outputs = audio_batch_to_vector(arrays, model, gpu, numpify_output,
-        batch_minutes)
+    outputs = batch_helper.handle_batch(arrays, model, gpu, numpify_output,
+        batch_size)
     items = []
     for output, audio_filename, start, end, identifier, name in zip(
         outputs, audio_filenames, starts, ends, identifiers, names):
@@ -97,21 +97,6 @@ def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
             numpify_output)
     return _huggingface_audio_to_vector(audio_array, model, model_type,
         numpify_output)
-
-
-def audio_batch_to_vector(audio_arrays, model=None, gpu=False,
-    numpify_output=True, batch_minutes=None):
-    '''Convert multiple audio arrays to embeddings.
-    audio_arrays:    sequence of 1D audio sample arrays
-    model:           pretrained model instance or model name
-    gpu:             whether to request CUDA
-    numpify_output:  whether to convert outputs to numpy
-    batch_minutes:   batch budget in minutes
-    '''
-    audio_arrays = _require_audio_batch(audio_arrays)
-    outputs = batch_helper.handle_batch(audio_arrays, model, gpu,
-        numpify_output, batch_minutes)
-    return outputs
 
 
 def _huggingface_audio_to_vector(audio_array, model, model_type,
@@ -165,15 +150,6 @@ def add_info(outputs, audio_filename, start, end, identifier, name):
     outputs.identifier = identifier
     outputs.name = name
     return outputs
-
-
-def _require_audio_batch(audio_arrays):
-    audio_arrays = list(audio_arrays)
-    if not audio_arrays:
-        raise ValueError('audio_arrays must contain at least one audio array')
-    return audio_arrays
-
-
 def _resolve_batch_values(values, expected_length, default, name):
     if values is None:
         return [default] * expected_length
