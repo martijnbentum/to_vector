@@ -172,7 +172,7 @@ class ToEmbeddingsTests(unittest.TestCase):
     @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
         return_value='wav2vec2')
     @mock.patch('to_vector.batch_helper.load.prepare_model')
-    def test_batch_helper_uses_single_batch_when_batch_size_is_none(
+    def test_batch_helper_uses_single_batch_when_batch_size_is_none_on_cpu(
         self, mock_prepare_model, mock_get_model_type,
         mock_single_batch_to_outputs
     ):
@@ -191,6 +191,44 @@ class ToEmbeddingsTests(unittest.TestCase):
             [1.0, 2.0],
             [3.0, 4.0],
         ])
+
+    @mock.patch('to_vector.batch_helper.compute_embedding_batch_size',
+        return_value=2)
+    @mock.patch('to_vector.batch_helper.single_batch_to_outputs')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_batch_helper_computes_batch_size_when_none_on_gpu(
+        self, mock_prepare_model, mock_get_model_type,
+        mock_single_batch_to_outputs, mock_compute_embedding_batch_size
+    ):
+        model = FakeHuggingFaceModel(BaseModelOutput(hidden_states=()))
+        mock_prepare_model.return_value = model
+        mock_single_batch_to_outputs.side_effect = [['a', 'b'], ['c']]
+        audio_arrays = [
+            np.array([1.0, 2.0]),
+            np.array([3.0, 4.0, 5.0, 6.0]),
+            np.array([7.0, 8.0]),
+        ]
+
+        result = batch_helper.handle_batch(audio_arrays, model='repo/model',
+            gpu=True, numpify_output=False)
+
+        self.assertEqual(result, ['a', 'b', 'c'])
+        mock_compute_embedding_batch_size.assert_called_once()
+        args = mock_compute_embedding_batch_size.call_args[0]
+        self.assertEqual(args[1], model)
+        self.assertEqual(len(args[0]), 3)
+        self.assertEqual([item.tolist() for item in args[0]], [
+            [1.0, 2.0],
+            [3.0, 4.0, 5.0, 6.0],
+            [7.0, 8.0],
+        ])
+        self.assertEqual(mock_single_batch_to_outputs.call_count, 2)
+        first_batch = mock_single_batch_to_outputs.call_args_list[0].args[0]
+        second_batch = mock_single_batch_to_outputs.call_args_list[1].args[0]
+        self.assertEqual([len(item) for item in first_batch], [2, 4])
+        self.assertEqual([len(item) for item in second_batch], [2])
 
     def test_batch_helper_rejects_nonpositive_batch_size(self):
         with self.assertRaisesRegex(
