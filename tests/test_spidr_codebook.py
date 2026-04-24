@@ -128,13 +128,12 @@ class SpidrCodebookTests(unittest.TestCase):
             [np.array([[[0.1, 0.9]]]), np.array([[[0.8, 0.2]]])],
             [np.array([[[0.3, 0.7]]])],
         ]
-        batch_minutes = 4 / 16_000 / 60
 
         result = spidr_codebook.audio_batch_to_codebook_probabilities([
             np.array([1.0, 2.0]),
             np.array([3.0, 4.0]),
             np.array([5.0, 6.0]),
-        ], model=model, batch_minutes=batch_minutes)
+        ], model=model, batch_size=2)
 
         self.assertEqual(len(result), 3)
         self.assertEqual(mock_single_batch_to_probabilities.call_count, 2)

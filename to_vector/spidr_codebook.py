@@ -26,7 +26,7 @@ def filename_to_codebook_probabilities(audio_filename, start=0.0, end=None,
 
 
 def filename_batch_to_codebook_probabilities(audio_filenames, starts=None,
-    ends=None, model=None, gpu=False, batch_minutes=None):
+    ends=None, model=None, gpu=False, batch_size=None):
     '''Convert multiple audio files to SpidR codebook probabilities.'''
     audio_filenames = [Path(filename).resolve() for filename in audio_filenames]
     if not audio_filenames:
@@ -36,11 +36,11 @@ def filename_batch_to_codebook_probabilities(audio_filenames, starts=None,
     ends = _resolve_batch_values(ends, len(audio_filenames), None, 'ends')
     arrays = audio.load_audio_batch(audio_filenames, starts, ends)
     return audio_batch_to_codebook_probabilities(arrays, model=model,
-        gpu=gpu, batch_minutes=batch_minutes)
+        gpu=gpu, batch_size=batch_size)
 
 
 def filename_batch_to_codebook_indices(audio_filenames, starts=None,
-    ends=None, model=None, gpu=False, batch_minutes=None):
+    ends=None, model=None, gpu=False, batch_size=None):
     '''Convert multiple audio files to SpidR codebook indices.'''
     audio_filenames = [Path(filename).resolve() for filename in audio_filenames]
     if not audio_filenames:
@@ -50,7 +50,7 @@ def filename_batch_to_codebook_indices(audio_filenames, starts=None,
     ends = _resolve_batch_values(ends, len(audio_filenames), None, 'ends')
     arrays = audio.load_audio_batch(audio_filenames, starts, ends)
     return audio_batch_to_codebook_indices(arrays, model=model, gpu=gpu,
-        batch_minutes=batch_minutes)
+        batch_size=batch_size)
 
 
 def filename_to_codevectors(audio_filename, start=0.0, end=None,
@@ -62,7 +62,7 @@ def filename_to_codevectors(audio_filename, start=0.0, end=None,
 
 
 def filename_batch_to_codevectors(audio_filenames, starts=None, ends=None,
-    model=None, gpu=False, batch_minutes=None):
+    model=None, gpu=False, batch_size=None):
     '''Convert multiple audio files to SpidR codevectors.'''
     audio_filenames = [Path(filename).resolve() for filename in audio_filenames]
     if not audio_filenames:
@@ -72,7 +72,7 @@ def filename_batch_to_codevectors(audio_filenames, starts=None, ends=None,
     ends = _resolve_batch_values(ends, len(audio_filenames), None, 'ends')
     arrays = audio.load_audio_batch(audio_filenames, starts, ends)
     return audio_batch_to_codevectors(arrays, model=model, gpu=gpu,
-        batch_minutes=batch_minutes)
+        batch_size=batch_size)
 
 
 def audio_to_codebook_probabilities(audio_array, model=None, gpu=False):
@@ -82,15 +82,13 @@ def audio_to_codebook_probabilities(audio_array, model=None, gpu=False):
 
 
 def audio_batch_to_codebook_probabilities(audio_arrays, model=None,
-    gpu=False, batch_minutes=None):
+    gpu=False, batch_size=None):
     '''Convert multiple audio arrays to SpidR codebook probabilities.'''
     audio_arrays = _require_audio_batch(audio_arrays)
     model = _spidr_util.prepare_model(model, gpu)
-    batch_minutes = batch_helper.resolve_batch_minutes(model, batch_minutes)
-    max_samples = batch_helper.batch_minutes_to_samples(batch_minutes)
     items = []
     for batch_audio_arrays in batch_helper.split_audio_arrays(audio_arrays,
-        max_samples):
+        batch_size=batch_size):
         items.extend(_single_batch_to_probabilities(batch_audio_arrays, model))
     return items
 
@@ -102,10 +100,10 @@ def audio_to_codebook_indices(audio_array, model=None, gpu=False):
 
 
 def audio_batch_to_codebook_indices(audio_arrays, model=None, gpu=False,
-    batch_minutes=None):
+    batch_size=None):
     '''Convert multiple audio arrays to SpidR codebook indices.'''
     probabilities = audio_batch_to_codebook_probabilities(audio_arrays,
-        model=model, gpu=gpu, batch_minutes=batch_minutes)
+        model=model, gpu=gpu, batch_size=batch_size)
     return [probabilities_to_codebook_indices(item) for item in probabilities]
 
 
@@ -115,11 +113,11 @@ def audio_to_codevectors(audio_array, model=None, gpu=False):
 
 
 def audio_batch_to_codevectors(audio_arrays, model=None, gpu=False,
-    batch_minutes=None):
+    batch_size=None):
     '''Convert multiple audio arrays to SpidR codevectors.'''
     model = _spidr_util.prepare_model(model, gpu)
     codebook_indices = audio_batch_to_codebook_indices(audio_arrays,
-        model=model, gpu=False, batch_minutes=batch_minutes)
+        model=model, gpu=False, batch_size=batch_size)
     codebooks = load_codebooks(model)
     return [codebook_indices_to_codevectors(item, codebooks)
         for item in codebook_indices]
