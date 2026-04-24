@@ -15,8 +15,13 @@ embedding_safety_factor = 4.0
 def handle_batch(audio_arrays, model=None, gpu=False, numpify_output=True,
     batch_size=None):
     '''Run batched embedding extraction with multi-batch coordination.'''
+    audio_arrays = list(audio_arrays)
+    if not audio_arrays:
+        return []
     model = load.prepare_model(model, gpu)
     model_type = model_registry.model_to_type(model)
+    if batch_size is None and gpu is True:
+        batch_size = compute_embedding_batch_size(audio_arrays, model)
     batches = split_audio_arrays(audio_arrays, batch_size=batch_size)
     items = []
     for batch_audio_arrays in batches:
@@ -26,31 +31,14 @@ def handle_batch(audio_arrays, model=None, gpu=False, numpify_output=True,
         items.extend(outputs)
     return items
 
-def compute_embedding_batch_size(n_items, length_seconds, gpu_size_gb,
-    batch_size=None):
+def compute_embedding_batch_size(audio_arrays, model):
     '''Resolve a defensive embedding batch size from coarse GPU limits.'''
-    n_items = int(n_items)
-    if n_items <= 0:
-        raise ValueError('n_items must be greater than zero')
-    length_seconds = float(length_seconds)
-    if length_seconds <= 0:
-        raise ValueError('length_seconds must be greater than zero')
-    gpu_size_gb = float(gpu_size_gb)
-    if gpu_size_gb <= 0:
-        raise ValueError('gpu_size_gb must be greater than zero')
-    if batch_size is not None:
-        batch_size = int(batch_size)
-        if batch_size <= 0:
-            raise ValueError('batch_size must be greater than zero')
-        batch_size = min(batch_size, n_items)
-        print(f'embedding batch size: {batch_size} items (explicit)')
-        return batch_size
+    n_items = len(audio_arrays)
+    length_seconds = max(len(item) for item in audio_arrays) / sample_rate
+    gpu_size_gb = model_gpu_size_gb(model)
     usable_gb = max(1.0, gpu_size_gb - reserved_gpu_gb - free_gpu_gb)
     usable_bytes = usable_gb * (1024 ** 3)
-    item_bytes = (
-        length_seconds * estimated_embedding_mb_per_second *
-        embedding_safety_factor * (1024 ** 2)
-    )
+    item_bytes = compute_item_bytes(length_seconds)
     item_count = int(usable_bytes // item_bytes)
     item_count = max(1, min(n_items, item_count))
     m = f'embedding batch size: {item_count} items '
@@ -58,6 +46,21 @@ def compute_embedding_batch_size(n_items, length_seconds, gpu_size_gb,
     m += f'{length_seconds:.2f}s/item)'
     print(m)
     return item_count
+
+def compute_item_bytes(length_seconds):
+    item_bytes = length_seconds * estimated_embedding_mb_per_second
+    item_bytes *= embedding_safety_factor
+    item_bytes *= (1024 ** 2)
+    return item_bytes
+
+def model_gpu_size_gb(model):
+    '''Return the total memory of the model GPU in gigabytes.'''
+    device = load.model_device(model)
+    if device.type != 'cuda': raise ValueError('model must be on GPU')
+    device_index = device.index
+    if device_index is None:device_index = torch.cuda.current_device()
+    props = torch.cuda.get_device_properties(device_index)
+    return props.total_memory / (1024 ** 3)
 
 
 def split_audio_arrays(audio_arrays, batch_size=None):
