@@ -15,10 +15,10 @@ from tests.test_helpers import FakeSpidrModel
 
 
 class ToEmbeddingsTests(unittest.TestCase):
-    @mock.patch('to_vector.to_embeddings.batch_helper.handle_batch')
+    @mock.patch('to_vector.to_embeddings.batch_helper.handle_batching')
     @mock.patch('to_vector.to_embeddings.audio.load_audio_batch')
     def test_filename_batch_to_vector_composes_batch_helpers(
-        self, mock_load_audio_batch, mock_handle_batch
+        self, mock_load_audio_batch, mock_handle_batching
     ):
         first = BaseModelOutput(hidden_states=[np.array([[[1.0]]])])
         second = BaseModelOutput(hidden_states=[np.array([[[2.0]]])])
@@ -26,7 +26,7 @@ class ToEmbeddingsTests(unittest.TestCase):
             np.array([1.0, 2.0]),
             np.array([3.0, 4.0]),
         ]
-        mock_handle_batch.return_value = [first, second]
+        mock_handle_batching.return_value = [first, second]
 
         outputs = to_vector.filename_batch_to_vector(
             ['a.wav', 'b.wav'],
@@ -46,7 +46,7 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertTrue(str(filenames[1]).endswith('/b.wav'))
         self.assertEqual(starts, [0.0, 1.5])
         self.assertEqual(ends, [0.5, None])
-        mock_handle_batch.assert_called_once_with(
+        mock_handle_batching.assert_called_once_with(
             mock_load_audio_batch.return_value, 'repo/model', True, True, 2)
         self.assertTrue(outputs[0].audio_filename.endswith('/a.wav'))
         self.assertEqual(outputs[0].start_time, 0.0)
@@ -155,7 +155,7 @@ class ToEmbeddingsTests(unittest.TestCase):
             ['c'],
         ]
 
-        result = batch_helper.handle_batch([
+        result = batch_helper.handle_batching([
             np.array([1.0, 2.0]),
             np.array([3.0, 4.0]),
             np.array([5.0, 6.0]),
@@ -180,7 +180,7 @@ class ToEmbeddingsTests(unittest.TestCase):
         mock_prepare_model.return_value = model
         mock_single_batch_to_outputs.return_value = ['a']
 
-        batch_helper.handle_batch([
+        batch_helper.handle_batching([
             np.array([1.0, 2.0]),
             np.array([3.0, 4.0]),
         ], model='repo/model', numpify_output=False)
@@ -211,7 +211,7 @@ class ToEmbeddingsTests(unittest.TestCase):
             np.array([7.0, 8.0]),
         ]
 
-        result = batch_helper.handle_batch(audio_arrays, model='repo/model',
+        result = batch_helper.handle_batching(audio_arrays, model='repo/model',
             gpu=True, numpify_output=False)
 
         self.assertEqual(result, ['a', 'b', 'c'])

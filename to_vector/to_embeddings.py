@@ -51,8 +51,13 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
         'identifiers')
     names = _resolve_batch_values(names, len(audio_filenames), '', 'names')
     arrays = audio.load_audio_batch(audio_filenames, starts, ends)
-    outputs = batch_helper.handle_batch(arrays, model, gpu, numpify_output,
+    outputs = batch_helper.handle_batching(arrays, model, gpu,
+        numpify_output,
         batch_size)
+    if len(audio_filenames) != len(outputs):
+        m = f'batch_helper.handle_batching() returned {len(outputs)} outputs '
+        m += f', but expected {len(audio_filenames)} outputs'
+        raise ValueError(m)
     items = []
     for output, audio_filename, start, end, identifier, name in zip(
         outputs, audio_filenames, starts, ends, identifiers, names):

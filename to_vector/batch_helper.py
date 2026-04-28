@@ -12,7 +12,7 @@ estimated_embedding_mb_per_second = 2.0
 embedding_safety_factor = 4.0
 
 
-def handle_batch(audio_arrays, model=None, gpu=False, numpify_output=True,
+def handle_batching(audio_arrays, model=None, gpu=False, numpify_output=True,
     batch_size=None):
     '''Run batched embedding extraction with multi-batch coordination.'''
     audio_arrays = list(audio_arrays)
