@@ -7,7 +7,6 @@ from . import _spidr_attention
 from . import audio
 from . import load
 from . import model_registry
-from .to_embeddings import add_info
 
 
 def audio_to_attention(audio_array, model, gpu=False, numpify_output=True,
@@ -82,7 +81,15 @@ def filename_to_attention(audio_filename, start=0.0, end=None, model=None,
     array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_attention(array, model, gpu, numpify_output, layer, head,
         average_heads)
-    return add_info(outputs, audio_filename, start, end, '', '')
+    return _add_info(outputs, audio_filename, start, end)
+
+
+def _add_info(outputs, audio_filename, start, end):
+    '''Attach source file metadata to an attention output object.'''
+    outputs.audio_filename = str(audio_filename)
+    outputs.start_time = start
+    outputs.end_time = end
+    return outputs
 
 
 def attention_to_tensor(attention):

@@ -1,8 +1,7 @@
 '''Public package API for to-vector.'''
 
 from .attention import audio_to_attention, filename_to_attention
-from .audio import load_audio, load_audio_batch
-from .audio import load_audio_batch_milliseconds, load_audio_milliseconds
+from .audio import load_audio
 from .audio import standardize_audio
 from .codebook_artifacts import (
     CodebookArtifacts,
@@ -40,9 +39,6 @@ __all__ = [
     'filename_to_codevectors',
     'filename_to_vector',
     'load_audio',
-    'load_audio_batch',
-    'load_audio_batch_milliseconds',
-    'load_audio_milliseconds',
     'load_feature_extractor',
     'load_model',
     'load_model_pt',

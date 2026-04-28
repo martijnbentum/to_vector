@@ -142,12 +142,9 @@ class SpidrCodebookTests(unittest.TestCase):
         self.assertEqual([len(item) for item in first_batch], [2, 2])
         self.assertEqual([len(item) for item in second_batch], [2])
 
-    @mock.patch('to_vector.spidr_codebook.audio.load_audio_batch')
     def test_filename_batch_to_codebook_indices_validates_metadata_lengths(
-        self, mock_load_audio_batch
+        self
     ):
-        mock_load_audio_batch.return_value = [np.array([1.0])]
-
         with self.assertRaisesRegex(
             ValueError, 'starts must have the same length as audio_filenames'
         ):

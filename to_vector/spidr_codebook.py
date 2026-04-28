@@ -87,8 +87,7 @@ def audio_batch_to_codebook_probabilities(audio_arrays, model=None,
     audio_arrays = _require_audio_batch(audio_arrays)
     model = _spidr_util.prepare_model(model, gpu)
     items = []
-    for batch_audio_arrays in batch_helper.split_audio_arrays(audio_arrays,
-        batch_size=batch_size):
+    for batch_audio_arrays in _split_audio_arrays(audio_arrays, batch_size):
         items.extend(_single_batch_to_probabilities(batch_audio_arrays, model))
     return items
 
@@ -215,6 +214,14 @@ def _require_audio_batch(audio_arrays):
     if not audio_arrays:
         raise ValueError('audio_arrays must contain at least one audio array')
     return audio_arrays
+
+
+def _split_audio_arrays(audio_arrays, batch_size=None):
+    '''Split audio arrays into fixed-size batches.'''
+    if batch_size is None:
+        yield list(audio_arrays)
+        return
+    yield from batch_helper.split_by_count(audio_arrays, batch_size)
 
 
 def _resolve_batch_values(values, expected_length, default, name):
