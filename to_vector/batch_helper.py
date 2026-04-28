@@ -1,9 +1,12 @@
+from pathlib import Path
+from progressbar import progressbar
 import torch
 
 from . import hf_batch_helper
 from . import load
 from . import model_registry
 from . import spidr_batch_helper
+
 
 sample_rate = 16_000
 reserved_gpu_gb = 1.0
@@ -12,29 +15,45 @@ estimated_embedding_mb_per_second = 2.0
 embedding_safety_factor = 4.0
 
 
-def handle_batching(audio_arrays, model=None, gpu=False, numpify_output=True,
-    batch_size=None):
+def handle_batching(filenames, starts = None, ends = None, model=None, gpu=False, 
+    numpify_output=True, batch_size=None):
     '''Run batched embedding extraction with multi-batch coordination.'''
-    audio_arrays = list(audio_arrays)
-    if not audio_arrays:
-        return []
+    if gpu is True and ends is None and batch_size is None: 
+        m = 'ends must be provided when gpu is True to compute batch size'
+        raise ValueError(m)
+    fn = [Path(filename).resolve() for filename in filenames]
+    if len(filenames) == 0: return []
+    if starts is None and ends is None: pass
+    elif ends is None and len(fn) == len(starts): pass
+    elif starts is None and len(fn) == len(ends): pass
+    elif len(fn) == len(starts) == len(ends): pass
+    else: 
+        raise ValueError('filenames, starts, and ends must have the same length')
+    starts = _check_batch_values(starts, len(filenames), 0.0, 'starts')
+    ends = _check_batch_values(ends, len(filenames), None, 'ends')
     model = load.prepare_model(model, gpu)
     model_type = model_registry.model_to_type(model)
     if batch_size is None and gpu is True:
-        batch_size = compute_embedding_batch_size(audio_arrays, model)
-    batches = split_audio_arrays(audio_arrays, batch_size=batch_size)
+        durations = _compute_durations(starts, ends)
+        batch_size = compute_embedding_batch_size(durations, model)
+    if not batch_size is None: print(f'batch size: {batch_size}, gpu: {gpu}') 
+    else: print(f'no batching, gpu: {gpu}')
+    input_items = zip(filenames, starts, ends)
+    batches = split(input_items, batch_size=batch_size)
     items = []
-    for batch_audio_arrays in batches:
-        outputs = single_batch_to_outputs(batch_audio_arrays, model, model_type)
-        if numpify_output:
-            outputs = [numpify(item) for item in outputs]
+    print('processing batches:')
+    for batch in progressbar(batches):
+        outputs = single_batch_to_outputs(batch, model, model_type)
+        if numpify_output: outputs = [numpify(item) for item in outputs]
         items.extend(outputs)
     return items
 
-def compute_embedding_batch_size(audio_arrays, model):
-    '''Resolve a defensive embedding batch size from coarse GPU limits.'''
-    n_items = len(audio_arrays)
-    length_seconds = max(len(item) for item in audio_arrays) / sample_rate
+def compute_embedding_batch_size(durations, model):
+    '''compute a defensive embedding batch size from coarse GPU limits.'''
+    n_items = len(durations)
+    length_seconds = max(durations) 
+    if length_seconds <= 0: 
+        raise ValueError('segment durations must be greater than zero')
     gpu_size_gb = model_gpu_size_gb(model)
     usable_gb = max(1.0, gpu_size_gb - reserved_gpu_gb - free_gpu_gb)
     usable_bytes = usable_gb * (1024 ** 3)
@@ -63,22 +82,22 @@ def model_gpu_size_gb(model):
     return props.total_memory / (1024 ** 3)
 
 
-def split_audio_arrays(audio_arrays, batch_size=None):
-    '''Split audio arrays into fixed-size batches.'''
+def split(input_items, batch_size=None):
+    '''Split input_items into fixed-size batches.'''
     if batch_size is None:
-        yield list(audio_arrays)
+        yield list(input_items)
         return
-    yield from split_audio_arrays_by_count(audio_arrays, batch_size)
+    yield from split_by_count(input_items, batch_size)
 
 
-def split_audio_arrays_by_count(audio_arrays, batch_size):
-    '''Split audio arrays into fixed-size batches.'''
+def split_by_count(input_items, batch_size):
+    '''Split input items into fixed-size batches.'''
     batch_size = int(batch_size)
     if batch_size <= 0:
         raise ValueError('batch_size must be greater than zero')
     batch = []
-    for audio_array in audio_arrays:
-        batch.append(audio_array)
+    for input_item in input_items:
+        batch.append(input_item)
         if len(batch) == batch_size:
             yield batch
             batch = []
@@ -86,8 +105,12 @@ def split_audio_arrays_by_count(audio_arrays, batch_size):
         yield batch
 
 
-def single_batch_to_outputs(audio_arrays, model, model_type):
+def single_batch_to_outputs(batch, model, model_type):
     '''Dispatch one prepared batch to the correct backend helper.'''
+    audio_arrays = []
+    for filename, start, end in batch:
+        audio_array = load.load_audio(filename, start, end)
+        audio_arrays.append(audio_array)
     if model_type == 'spidr':
         return spidr_batch_helper.audio_batch_to_outputs(audio_arrays, model)
     return hf_batch_helper.audio_batch_to_outputs(audio_arrays, model,
@@ -104,3 +127,24 @@ def numpify(outputs):
         hs.append(hidden_state.cpu().numpy())
     outputs.hidden_states = hs
     return outputs
+
+def _check_batch_values(values, expected_length, default, name):
+    if values is None:
+        return [default] * expected_length
+    values = list(values)
+    if len(values) != expected_length:
+        m = f'{name} must have the same length as audio_filenames'
+        raise ValueError(m)
+    return values
+
+def _compute_durations(starts, ends):
+    durations = []
+    for start, end in zip(starts, ends):
+        if end is None: continue
+        duration = end - start
+        if duration < 0:
+            raise ValueError('end time must be greater than start time')
+        durations.append(duration)
+    if len(durations) == 0:
+        raise ValueError('at least one duration must be computable') 
+    return durations

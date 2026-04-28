@@ -4,7 +4,6 @@ from transformers.modeling_outputs import BaseModelOutput
 
 from . import load
 
-
 def audio_batch_to_outputs(audio_arrays, model, model_type):
     '''Convert a batch of audio arrays to per-item Hugging Face outputs.'''
     feature_extractor = load.prepare_feature_extractor(model)
@@ -20,7 +19,7 @@ def audio_batch_to_outputs(audio_arrays, model, model_type):
     extract_features = getattr(outputs, 'extract_features', None)
     if extract_features is None and model_type == 'hubert':
         extract_features = inputs_to_cnn(inputs, model)
-    output_lengths = resolve_output_lengths(inputs, outputs, model)
+    output_lengths = compute_output_lengths(inputs, outputs, model)
     items = []
     for index, output_length in enumerate(output_lengths):
         item = slice_outputs(outputs, index, output_length, extract_features,
@@ -28,8 +27,7 @@ def audio_batch_to_outputs(audio_arrays, model, model_type):
         items.append(item)
     return items
 
-
-def resolve_output_lengths(inputs, outputs, model):
+def compute_output_lengths(inputs, outputs, model):
     '''Resolve per-item output lengths from padded Hugging Face inputs.'''
     hidden_states = getattr(outputs, 'hidden_states', None)
     if hidden_states is None:
@@ -42,7 +40,11 @@ def resolve_output_lengths(inputs, outputs, model):
     if hasattr(model, '_get_feat_extract_output_lengths'):
         output_lengths = model._get_feat_extract_output_lengths(input_lengths)
         return [int(length) for length in output_lengths]
-    return [default_length] * hidden_states[0].shape[0]
+    else:
+        print('Warning: model does not have _get_feat_extract_output_lengths') 
+        print('using stride 320 and window size 400 to estimate output lengths')
+        output_lengths = [n_frames(length) for length in input_lengths]
+    return output_lengths
 
 
 def slice_outputs(outputs, index, output_length, extract_features, model_type):
@@ -68,4 +70,13 @@ def inputs_to_cnn(inputs, model):
             outputs = model.wav2vec2.feature_extractor(input_values)
         else:
             outputs = model.feature_extractor(input_values)
+
     return outputs.transpose(1, 2).detach()
+
+def n_frames(n_samples, stride=320, window_size=400):
+    '''map number of input samples to number of valid frames.
+    drops frames whose window does not fully fit
+    '''
+    if n_samples < window_size:
+        return 0
+    return 1 + (n_samples - window_size) // stride

@@ -11,79 +11,53 @@ from . import model_registry
 
 
 def filename_to_vector(audio_filename, start=0.0, end=None, model=None,
-    gpu=False, identifier='', name='', numpify_output=True):
+    gpu=False, numpify_output=True):
     '''Convert an audio file to a vector using a pretrained model.
     audio_filename:  path to the audio file
     start:           segment start time in seconds
     end:             segment end time in seconds
     model:           pretrained model instance or model name
-    identifier:      optional identifier
-    name:            optional name
     numpify_output:  whether to convert outputs to numpy
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_vector(array, model, gpu, numpify_output)
-    outputs = add_info(outputs, audio_filename, start, end, identifier, name)
     return outputs
 
-
 def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
-    model=None, gpu=False, identifiers=None, names=None,
-    numpify_output=True, batch_size=None):
+    model=None, gpu=False, numpify_output=True, batch_size=None):
     '''Convert multiple audio files to embeddings.
     audio_filenames: sequence of audio file paths
     starts:          optional sequence of segment starts in seconds
     ends:            optional sequence of segment ends in seconds
     model:           pretrained model instance or model name
     gpu:             whether to request CUDA
-    identifiers:     optional sequence of identifiers
-    names:           optional sequence of names
     numpify_output:  whether to convert outputs to numpy
     batch_size:      optional item count per batch
     '''
-    audio_filenames = [Path(filename).resolve() for filename in audio_filenames]
-    if not audio_filenames:
-        raise ValueError('audio_filenames must contain at least one filename')
-    starts = _resolve_batch_values(starts, len(audio_filenames), 0.0, 'starts')
-    ends = _resolve_batch_values(ends, len(audio_filenames), None, 'ends')
-    identifiers = _resolve_batch_values(identifiers, len(audio_filenames), '',
-        'identifiers')
-    names = _resolve_batch_values(names, len(audio_filenames), '', 'names')
-    arrays = audio.load_audio_batch(audio_filenames, starts, ends)
-    outputs = batch_helper.handle_batching(arrays, model, gpu,
-        numpify_output,
-        batch_size)
+    outputs = batch_helper.handle_batching(audio_filenames, starts, ends, model,
+        gpu, numpify_output, batch_size)
     if len(audio_filenames) != len(outputs):
         m = f'batch_helper.handle_batching() returned {len(outputs)} outputs '
         m += f', but expected {len(audio_filenames)} outputs'
         raise ValueError(m)
-    items = []
-    for output, audio_filename, start, end, identifier, name in zip(
-        outputs, audio_filenames, starts, ends, identifiers, names):
-        item = add_info(output, audio_filename, start, end, identifier, name)
-        items.append(item)
-    return items
+    return outputs
 
 
-def filename_to_cnn(audio_filename, start=0.0, end=None, model=None,
-    gpu=False, identifier='', name=''):
+def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False):
     '''Convert an audio file to features using a pretrained model.
     audio_filename:  path to the audio file
     start:           segment start time in seconds
     end:             segment end time in seconds
     model:           pretrained model instance or model name
     gpu:             whether to request CUDA
-    identifier:      optional identifier
-    name:            optional name
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
-    outputs = audio_to_cnn(array, model, gpu, identifier, name)
+    outputs = audio_to_cnn(array, model, gpu) 
     o = BaseModelOutput(hidden_states=None)
     o.extract_features = outputs
-    outputs = add_info(o, audio_filename, start, end, identifier, name)
-    return outputs
+    return o
 
 
 def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
@@ -139,39 +113,12 @@ def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
     outputs.model_type = 'spidr'
     if numpify_output: return batch_helper.numpify(outputs)
     return outputs
-def add_info(outputs, audio_filename, start, end, identifier, name):
-    '''Add information about the audio file to the output object.
-    outputs:         output object to update
-    audio_filename:  path to the audio file
-    start:           segment start time
-    end:             segment end time
-    identifier:      optional identifier
-    name:            optional name
-    '''
-    audio_filename = str(audio_filename)
-    outputs.audio_filename = audio_filename
-    outputs.start_time = start
-    outputs.end_time = end
-    outputs.identifier = identifier
-    outputs.name = name
-    return outputs
-def _resolve_batch_values(values, expected_length, default, name):
-    if values is None:
-        return [default] * expected_length
-    values = list(values)
-    if len(values) != expected_length:
-        m = f'{name} must have the same length as audio_filenames'
-        raise ValueError(m)
-    return values
 
-
-def audio_to_cnn(audio, model=None, gpu=False, identifier='', name=''):
+def audio_to_cnn(audio, model=None, gpu=False):
     '''Convert an audio array to features using a pretrained model.
     audio:         1D audio samples
     model:         pretrained model instance or model name
     gpu:           whether to request CUDA
-    identifier:    optional identifier
-    name:          optional name
     '''
     model = load.prepare_model(model, gpu)
     if model_registry.model_to_type(model) == 'spidr':
