@@ -35,13 +35,29 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     numpify_output:  whether to convert outputs to numpy
     batch_size:      optional item count per batch
     '''
-    outputs = batch_helper.handle_batching(audio_filenames, starts, ends, model,
-        gpu, numpify_output, batch_size)
+    outputs = list(iter_filename_batch_to_vector(audio_filenames, starts=starts,
+        ends=ends, model=model, gpu=gpu, numpify_output=numpify_output,
+        batch_size=batch_size))
     if len(audio_filenames) != len(outputs):
-        m = f'batch_helper.handle_batching() returned {len(outputs)} outputs '
+        m = f'iter_filename_batch_to_vector() returned {len(outputs)} outputs '
         m += f', but expected {len(audio_filenames)} outputs'
         raise ValueError(m)
     return outputs
+
+
+def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
+    model=None, gpu=False, numpify_output=True, batch_size=None):
+    '''Yield embeddings for multiple audio files in input order.
+    audio_filenames: sequence of audio file paths
+    starts:          optional sequence of segment starts in seconds
+    ends:            optional sequence of segment ends in seconds
+    model:           pretrained model instance or model name
+    gpu:             whether to request CUDA
+    numpify_output:  whether to convert outputs to numpy
+    batch_size:      optional item count per batch
+    '''
+    yield from batch_helper.iter_handle_batching(audio_filenames, starts, ends,
+        model, gpu, numpify_output, batch_size)
 
 
 def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False):

@@ -14,6 +14,7 @@ from .to_embeddings import (
     audio_to_cnn,
     audio_to_vector,
     filename_batch_to_vector,
+    iter_filename_batch_to_vector,
     filename_to_cnn,
     filename_to_vector,
 )
@@ -38,6 +39,7 @@ __all__ = [
     'filename_to_codebook_indices',
     'filename_to_codevectors',
     'filename_to_vector',
+    'iter_filename_batch_to_vector',
     'load_audio',
     'load_feature_extractor',
     'load_model',

@@ -18,11 +18,19 @@ embedding_safety_factor = 4.0
 def handle_batching(filenames, starts = None, ends = None, model=None, gpu=False, 
     numpify_output=True, batch_size=None):
     '''Run batched embedding extraction with multi-batch coordination.'''
+    return list(iter_handle_batching(filenames, starts=starts, ends=ends,
+        model=model, gpu=gpu, numpify_output=numpify_output,
+        batch_size=batch_size))
+
+
+def iter_handle_batching(filenames, starts = None, ends = None, model=None,
+    gpu=False, numpify_output=True, batch_size=None):
+    '''Yield embedding outputs in input order while batching internally.'''
     if gpu is True and ends is None and batch_size is None: 
         m = 'ends must be provided when gpu is True to compute batch size'
         raise ValueError(m)
     fn = [Path(filename).resolve() for filename in filenames]
-    if len(filenames) == 0: return []
+    if len(filenames) == 0: return
     if starts is None and ends is None: pass
     elif ends is None and len(fn) == len(starts): pass
     elif starts is None and len(fn) == len(ends): pass
@@ -40,13 +48,11 @@ def handle_batching(filenames, starts = None, ends = None, model=None, gpu=False
     else: print(f'no batching, gpu: {gpu}')
     input_items = zip(filenames, starts, ends)
     batches = split(input_items, batch_size=batch_size)
-    items = []
     print('processing batches:')
     for batch in progressbar(batches):
         outputs = single_batch_to_outputs(batch, model, model_type)
         if numpify_output: outputs = [numpify(item) for item in outputs]
-        items.extend(outputs)
-    return items
+        yield from outputs
 
 def compute_embedding_batch_size(durations, model):
     '''compute a defensive embedding batch size from coarse GPU limits.'''
