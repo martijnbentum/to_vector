@@ -47,7 +47,7 @@ def iter_handle_batching(filenames, starts = None, ends = None, model=None,
     input_items = zip(filenames, starts, ends)
     batches = split(input_items, batch_size=batch_size)
     print('processing batches:')
-    max_value = len(input_items) // batch_size if batch_size else 1
+    max_value = len(filenames) // batch_size if batch_size else 1
     for batch in progressbar(batches, max_value = max_value):
         outputs = single_batch_to_outputs(batch, model, model_type)
         if numpify_output: outputs = [numpify(item) for item in outputs]
