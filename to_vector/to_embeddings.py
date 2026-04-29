@@ -104,6 +104,7 @@ def _huggingface_audio_to_vector(audio_array, model, model_type,
     if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
         outputs = model(**inputs, output_hidden_states=True)
+    del inputs
     if hasattr(outputs, 'last_hidden_state'):
         outputs.last_hidden_state = None
     outputs.model_type = model_type
@@ -154,5 +155,7 @@ def audio_to_cnn(audio, model=None, gpu=False):
             outputs = model.wav2vec2.feature_extractor(input_values)
         else:
             outputs = model.feature_extractor(input_values)
+    del inputs
+    del input_values
     outputs = outputs.transpose(1, 2).detach().cpu().numpy()
     return outputs

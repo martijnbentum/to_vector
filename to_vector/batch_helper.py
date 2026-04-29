@@ -9,8 +9,6 @@ from . import spidr_batch_helper
 
 
 sample_rate = 16_000
-reserved_gpu_gb = 1.0
-free_gpu_gb = 1.0
 estimated_embedding_mb_per_second = 2.0
 embedding_safety_factor = 4.0
 
@@ -52,6 +50,7 @@ def iter_handle_batching(filenames, starts = None, ends = None, model=None,
     for batch in progressbar(batches):
         outputs = single_batch_to_outputs(batch, model, model_type)
         if numpify_output: outputs = [numpify(item) for item in outputs]
+        if gpu: torch.cuda.empty_cache()
         yield from outputs
 
 def compute_embedding_batch_size(durations, model):
@@ -60,15 +59,17 @@ def compute_embedding_batch_size(durations, model):
     length_seconds = max(durations) 
     if length_seconds <= 0: 
         raise ValueError('segment durations must be greater than zero')
-    gpu_size_gb = model_gpu_size_gb(model)
-    usable_gb = max(1.0, gpu_size_gb - reserved_gpu_gb - free_gpu_gb)
+    free_gb = model_gpu_free_gb(model)
+    usable_gb = free_gb * 0.9
     usable_bytes = usable_gb * (1024 ** 3)
     item_bytes = compute_item_bytes(length_seconds)
+    item_mb = item_bytes / (1024 ** 2)
     item_count = int(usable_bytes // item_bytes)
     item_count = max(1, min(n_items, item_count))
     m = f'embedding batch size: {item_count} items '
-    m += f'(estimated from {gpu_size_gb:g} GB GPU, '
-    m += f'{length_seconds:.2f}s/item)'
+    m += f'(estimated from {free_gb:g} GB GPU, '
+    m += f'{length_seconds:.2f}s/item, '
+    m += f'{item_mb:.2f} MB/item)'
     print(m)
     return item_count
 
@@ -78,14 +79,14 @@ def compute_item_bytes(length_seconds):
     item_bytes *= (1024 ** 2)
     return item_bytes
 
-def model_gpu_size_gb(model):
-    '''Return the total memory of the model GPU in gigabytes.'''
+def model_gpu_free_gb(model):
+    '''Return the free memory of the model GPU in gigabytes.'''
     device = load.model_device(model)
     if device.type != 'cuda': raise ValueError('model must be on GPU')
     device_index = device.index
     if device_index is None:device_index = torch.cuda.current_device()
-    props = torch.cuda.get_device_properties(device_index)
-    return props.total_memory / (1024 ** 3)
+    free_bytes, _ = torch.cuda.mem_get_info(device_index)
+    return free_bytes / (1024 ** 3)
 
 
 def split(input_items, batch_size=None):
@@ -131,6 +132,7 @@ def numpify(outputs):
     hs = []
     for hidden_state in outputs.hidden_states:
         hs.append(hidden_state.cpu().numpy())
+        del hidden_state
     outputs.hidden_states = hs
     return outputs
 
