@@ -1,4 +1,5 @@
 from pathlib import Path
+from progressbar import progressbar
 
 import numpy as np
 import torch
@@ -62,6 +63,7 @@ def iter_filename_batch_to_codebook_indices(audio_filenames, starts=None,
     '''Yield Wav2Vec2 codebook indices for audio files in input order.'''
     model_pt = _prepare_model_pt(model_pt, gpu)
     codebook = load_codebook(model_pt)
+
     for codevectors in iter_filename_batch_to_codevectors(audio_filenames,
         starts=starts, ends=ends, model_pt=model_pt, gpu=False,
         batch_size=batch_size):
@@ -94,9 +96,13 @@ def iter_filename_batch_to_codevectors(audio_filenames, starts=None,
     model_pt = _prepare_model_pt(model_pt, gpu)
     model_on_gpu = load.model_is_on_gpu(model_pt)
     input_items = zip(audio_filenames, starts, ends)
-    for batch in batch_helper.split(input_items, batch_size=batch_size):
-        arrays = [audio.load_audio(filename, start, end)
-            for filename, start, end in batch]
+    batches = batch_helper.split(input_items, batch_size=batch_size)
+    max_value = len(audio_filenames) // batch_size if batch_size else 1
+    print('processing batches:')
+    for batch in progressbar(batches, max_value = max_value):
+        arrays = []
+        for filename, start, end in batch:
+            arrays.append(audio.load_audio(filename, start, end))
         yield from _audio_batch_to_codevectors(arrays, model_pt)
         del arrays
         if model_on_gpu: torch.cuda.empty_cache()
