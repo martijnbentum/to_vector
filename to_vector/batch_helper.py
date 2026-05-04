@@ -1,4 +1,8 @@
+import math
+import threading
 from pathlib import Path
+from queue import Queue
+
 from progressbar import progressbar
 import torch
 
@@ -11,6 +15,23 @@ from . import spidr_batch_helper
 sample_rate = 16_000
 estimated_embedding_mb_per_second = 2.0
 embedding_safety_factor = 4.0
+
+def make_audio_queue(batches):
+    prefetch_queue = Queue(maxsize=2)  # buffer at most one batch ahead
+
+    def producer():
+        try:
+            for batch in batches:
+                audio_arrays = [load.load_audio(fn, s, e) for fn, s, e in batch]
+                prefetch_queue.put(('audio', audio_arrays))
+        except Exception as exc:
+            prefetch_queue.put(('error', exc))
+        finally:
+            prefetch_queue.put(('done', None))
+
+    t = threading.Thread(target=producer, daemon=True)
+    t.start()
+    return prefetch_queue
 
 
 def handle_batching(filenames, starts = None, ends = None, model=None, gpu=False, 
@@ -42,14 +63,20 @@ def iter_handle_batching(filenames, starts = None, ends = None, model=None,
     if batch_size is None and gpu is True:
         durations = _compute_durations(starts, ends)
         batch_size = compute_embedding_batch_size(durations, model)
+    batch_size = _check_batch_size(batch_size)
     if not batch_size is None: print(f'batch size: {batch_size}, gpu: {gpu}') 
     else: print(f'no batching, gpu: {gpu}')
     input_items = zip(filenames, starts, ends)
     batches = split(input_items, batch_size=batch_size)
-    print('processing batches:')
-    max_value = len(filenames) // batch_size if batch_size else 1
-    for batch in progressbar(batches, max_value = max_value):
-        outputs = single_batch_to_outputs(batch, model, model_type)
+    prefetch_queue = make_audio_queue(batches)
+    max_value = math.ceil(len(filenames) / batch_size) if batch_size else 1
+    print(f'processing batches: {max_value}')
+    for _ in progressbar(range(max_value)):
+        queue_type, queue_value = prefetch_queue.get()
+        if queue_type == 'done': break
+        if queue_type == 'error': raise queue_value
+        audio_arrays = queue_value
+        outputs = single_batch_to_outputs(audio_arrays, model, model_type)
         if numpify_output: outputs = [numpify(item) for item in outputs]
         if gpu: torch.cuda.empty_cache()
         yield from outputs
@@ -100,9 +127,7 @@ def split(input_items, batch_size=None):
 
 def split_by_count(input_items, batch_size):
     '''Split input items into fixed-size batches.'''
-    batch_size = int(batch_size)
-    if batch_size <= 0:
-        raise ValueError('batch_size must be greater than zero')
+    batch_size = _check_batch_size(batch_size)
     batch = []
     for input_item in input_items:
         batch.append(input_item)
@@ -113,12 +138,8 @@ def split_by_count(input_items, batch_size):
         yield batch
 
 
-def single_batch_to_outputs(batch, model, model_type):
+def single_batch_to_outputs(audio_arrays, model, model_type):
     '''Dispatch one prepared batch to the correct backend helper.'''
-    audio_arrays = []
-    for filename, start, end in batch:
-        audio_array = load.load_audio(filename, start, end)
-        audio_arrays.append(audio_array)
     if model_type == 'spidr':
         return spidr_batch_helper.audio_batch_to_outputs(audio_arrays, model)
     return hf_batch_helper.audio_batch_to_outputs(audio_arrays, model,
@@ -145,6 +166,13 @@ def _check_batch_values(values, expected_length, default, name):
         m = f'{name} must have the same length as audio_filenames'
         raise ValueError(m)
     return values
+
+def _check_batch_size(batch_size):
+    if batch_size is None: return None
+    batch_size = int(batch_size)
+    if batch_size <= 0:
+        raise ValueError('batch_size must be greater than zero')
+    return batch_size
 
 def _compute_durations(starts, ends):
     durations = []

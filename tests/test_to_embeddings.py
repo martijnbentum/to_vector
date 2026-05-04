@@ -97,6 +97,62 @@ class ToEmbeddingsTests(unittest.TestCase):
                     to_vector.audio_to_cnn(np.array([1.0, 2.0, 3.0]),
                         model='checkpoint.pt')
 
+    @mock.patch('to_vector.batch_helper.single_batch_to_outputs')
+    @mock.patch('to_vector.batch_helper.load.load_audio')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_iter_handle_batching_uses_prefetched_audio_arrays(
+        self, mock_prepare_model, mock_get_model_type, mock_load_audio,
+        mock_single_batch_to_outputs
+    ):
+        model = object()
+        audio_arrays = [np.array([1.0]), np.array([2.0])]
+        mock_prepare_model.return_value = model
+        mock_load_audio.side_effect = audio_arrays
+        mock_single_batch_to_outputs.return_value = ['output']
+
+        result = list(batch_helper.iter_handle_batching(
+            ['a.wav', 'b.wav'], model='stub', batch_size=2,
+            numpify_output=False))
+
+        self.assertEqual(result, ['output'])
+        mock_single_batch_to_outputs.assert_called_once()
+        args = mock_single_batch_to_outputs.call_args.args
+        self.assertEqual(args[0], audio_arrays)
+        self.assertIs(args[1], model)
+        self.assertEqual(args[2], 'wav2vec2')
+
+    @mock.patch('to_vector.batch_helper.load.load_audio',
+        side_effect=RuntimeError('bad audio'))
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_iter_handle_batching_reraises_prefetch_errors(
+        self, mock_prepare_model, mock_get_model_type, mock_load_audio
+    ):
+        mock_prepare_model.return_value = object()
+
+        with self.assertRaisesRegex(RuntimeError, 'bad audio'):
+            list(batch_helper.iter_handle_batching(['a.wav'], model='stub',
+                batch_size=1, numpify_output=False))
+
+    @mock.patch('to_vector.batch_helper.make_audio_queue')
+    @mock.patch('to_vector.batch_helper.model_registry.model_to_type',
+        return_value='wav2vec2')
+    @mock.patch('to_vector.batch_helper.load.prepare_model')
+    def test_iter_handle_batching_rejects_invalid_batch_size_before_thread(
+        self, mock_prepare_model, mock_get_model_type, mock_make_audio_queue
+    ):
+        mock_prepare_model.return_value = object()
+
+        with self.assertRaisesRegex(ValueError,
+            'batch_size must be greater than zero'):
+            list(batch_helper.iter_handle_batching(['a.wav'], model='stub',
+                batch_size=0, numpify_output=False))
+
+        mock_make_audio_queue.assert_not_called()
+
     @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
     @mock.patch('to_vector.to_embeddings.model_registry.model_to_type',
         return_value='wav2vec2')
