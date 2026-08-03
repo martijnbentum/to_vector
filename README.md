@@ -36,6 +36,17 @@ pip install -e .[dev]
 This keeps editable-install metadata in `.build/` instead of creating
 `*.egg-info` at the repository root.
 
+Create local Wav2Vec2-base and HuBERT-base checkpoints with their official
+configurations and feature extractors, but randomly initialized weights:
+
+```python
+from to_vector.scripts import save_random_hubert_base
+from to_vector.scripts import save_random_wav2vec2_base
+
+save_random_wav2vec2_base('./wav2vec2-base-random')
+save_random_hubert_base('./hubert-base-random')
+```
+
 ## Supported model families
 
 The library is built around Hugging Face models compatible with:
