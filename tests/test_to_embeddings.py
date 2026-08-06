@@ -64,6 +64,61 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertEqual(tuple(result[0].extract_features.shape), (1, 2, 1))
         self.assertEqual(tuple(result[1].extract_features.shape), (1, 3, 1))
 
+    @mock.patch('to_vector.hf_batch_helper.load.prepare_feature_extractor')
+    def test_hf_batch_helper_audio_batch_to_cnn_splits_batch_without_full_forward(
+        self, mock_prepare_feature_extractor
+    ):
+        outputs = BaseModelOutput(hidden_states=None)
+        model = FakeHuggingFaceModel(outputs)
+        model.feature_extractor = mock.Mock(return_value=torch.tensor([
+            [[10.0, 11.0, 12.0]],
+            [[20.0, 21.0, 22.0]],
+        ]))
+        model._get_feat_extract_output_lengths = mock.Mock(
+            return_value=torch.tensor([2, 3]))
+        feature_extractor = mock.Mock(return_value={
+            'input_values': torch.tensor([
+                [1.0, 2.0, 0.0],
+                [3.0, 4.0, 5.0],
+            ]),
+            'attention_mask': torch.tensor([
+                [1, 1, 0],
+                [1, 1, 1],
+            ]),
+        })
+        mock_prepare_feature_extractor.return_value = feature_extractor
+
+        with mock.patch.object(FakeHuggingFaceModel, '__call__') as mock_call:
+            result = hf_batch_helper.audio_batch_to_cnn([
+                np.array([1.0, 2.0]),
+                np.array([3.0, 4.0, 5.0]),
+            ], model, 'wav2vec2')
+            mock_call.assert_not_called()
+
+        self.assertEqual(len(result), 2)
+        self.assertIsNone(result[0].hidden_states)
+        self.assertIsNone(result[1].hidden_states)
+        self.assertEqual(result[0].model_type, 'wav2vec2')
+        self.assertEqual(result[1].model_type, 'wav2vec2')
+        self.assertEqual(result[0].extract_features.shape, (1, 2, 1))
+        self.assertEqual(result[1].extract_features.shape, (1, 3, 1))
+        np.testing.assert_allclose(result[0].extract_features,
+            np.array([[[10.0], [11.0]]]))
+        np.testing.assert_allclose(result[1].extract_features,
+            np.array([[[20.0], [21.0], [22.0]]]))
+
+    def test_compute_cnn_output_lengths_defaults_to_extract_features_length(self):
+        extract_features = torch.zeros((3, 5, 2))
+        result = hf_batch_helper.compute_cnn_output_lengths({}, extract_features,
+            None)
+        self.assertEqual(result, [5, 5, 5])
+
+    def test_single_batch_to_cnn_outputs_raises_clear_error_for_spidr(self):
+        with self.assertRaisesRegex(
+            ValueError, 'audio_batch_to_cnn\\(\\) is not implemented for SpidR'):
+            batch_helper.single_batch_to_cnn_outputs([np.array([1.0])],
+                FakeSpidrModel(), 'spidr')
+
     @mock.patch('to_vector.spidr_batch_helper.audio.standardize_audio')
     def test_spidr_batch_helper_batches_spidr_outputs(
         self, mock_standardize_audio

@@ -8,6 +8,8 @@ class PublicApiTests(unittest.TestCase):
     def test_public_api_exports_main_helpers(self):
         for name in [
             'audio_to_vector',
+            'filename_batch_to_cnn',
+            'iter_filename_batch_to_cnn',
             'filename_batch_to_vector',
             'iter_filename_batch_to_vector',
             'filename_to_vector',
@@ -48,6 +50,19 @@ class PublicApiTests(unittest.TestCase):
         self.assertEqual(result, outputs)
         iter_handle_batching.assert_called_once_with(
             ['a.wav', 'b.wav'], [0.0, 1.0], [1.0, 2.0], 'stub', True, False, 2)
+
+    def test_iter_filename_batch_to_cnn_yields_outputs(self):
+        outputs = ['first', 'second']
+        with patch(
+                'to_vector.to_embeddings.batch_helper.iter_handle_cnn_batching',
+                return_value=iter(outputs)) as iter_handle_cnn_batching:
+            result = list(to_vector.iter_filename_batch_to_cnn(
+                ['a.wav', 'b.wav'], starts=[0.0, 1.0], ends=[1.0, 2.0],
+                model='stub', gpu=True, batch_size=2))
+
+        self.assertEqual(result, outputs)
+        iter_handle_cnn_batching.assert_called_once_with(
+            ['a.wav', 'b.wav'], [0.0, 1.0], [1.0, 2.0], 'stub', True, 2)
 
 
 if __name__ == '__main__':

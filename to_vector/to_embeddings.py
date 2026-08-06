@@ -60,6 +60,39 @@ def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
         model, gpu, numpify_output, batch_size)
 
 
+def filename_batch_to_cnn(audio_filenames, starts=None, ends=None, model=None,
+    gpu=False, batch_size=None):
+    '''Convert multiple audio files to CNN-only features.
+    audio_filenames: sequence of audio file paths
+    starts:          optional sequence of segment starts in seconds
+    ends:            optional sequence of segment ends in seconds
+    model:           pretrained model instance or model name
+    gpu:             whether to request CUDA
+    batch_size:      optional item count per batch
+    '''
+    outputs = list(iter_filename_batch_to_cnn(audio_filenames, starts=starts,
+        ends=ends, model=model, gpu=gpu, batch_size=batch_size))
+    if len(audio_filenames) != len(outputs):
+        m = f'iter_filename_batch_to_cnn() returned {len(outputs)} outputs '
+        m += f', but expected {len(audio_filenames)} outputs'
+        raise ValueError(m)
+    return outputs
+
+
+def iter_filename_batch_to_cnn(audio_filenames, starts=None, ends=None,
+    model=None, gpu=False, batch_size=None):
+    '''Yield CNN-only features for multiple audio files in input order.
+    audio_filenames: sequence of audio file paths
+    starts:          optional sequence of segment starts in seconds
+    ends:            optional sequence of segment ends in seconds
+    model:           pretrained model instance or model name
+    gpu:             whether to request CUDA
+    batch_size:      optional item count per batch
+    '''
+    yield from batch_helper.iter_handle_cnn_batching(audio_filenames, starts,
+        ends, model, gpu, batch_size)
+
+
 def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False):
     '''Convert an audio file to features using a pretrained model.
     audio_filename:  path to the audio file
