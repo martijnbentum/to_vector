@@ -27,47 +27,14 @@ def audio_batch_to_outputs(audio_arrays, model, model_type):
         items.append(item)
     return items
 
-def audio_batch_to_cnn(audio_arrays, model, model_type):
-    '''Convert a batch of audio arrays to per-item CNN-only outputs.'''
-    feature_extractor = load.prepare_feature_extractor(model)
-    gpu = load.model_is_on_gpu(model)
-    arrays = [np.asarray(audio_array) for audio_array in audio_arrays]
-    inputs = feature_extractor(arrays, sampling_rate=16_000,
-        return_tensors='pt', padding=True)
-    if gpu: inputs = inputs.to('cuda')
-    extract_features = inputs_to_cnn(inputs, model)
-    output_lengths = compute_cnn_output_lengths(inputs, extract_features, model)
-    items = []
-    for index, output_length in enumerate(output_lengths):
-        item = BaseModelOutput(hidden_states=None)
-        item.extract_features = extract_features[index:index + 1,
-            :output_length].detach().cpu().numpy()
-        item.model_type = model_type
-        items.append(item)
-    return items
-
-
 def compute_output_lengths(inputs, outputs, model):
     '''Resolve per-item output lengths from padded Hugging Face inputs.'''
     hidden_states = getattr(outputs, 'hidden_states', None)
     if hidden_states is None:
         raise ValueError('model outputs did not contain hidden_states')
+    default_length = int(hidden_states[0].shape[1])
     if 'attention_mask' not in inputs:
-        default_length = int(hidden_states[0].shape[1])
         return [default_length] * hidden_states[0].shape[0]
-    return _attention_mask_output_lengths(inputs, model)
-
-
-def compute_cnn_output_lengths(inputs, extract_features, model):
-    '''Resolve per-item output lengths for CNN-only (extract_features) outputs.'''
-    if 'attention_mask' not in inputs:
-        default_length = int(extract_features.shape[1])
-        return [default_length] * extract_features.shape[0]
-    return _attention_mask_output_lengths(inputs, model)
-
-
-def _attention_mask_output_lengths(inputs, model):
-    '''Resolve per-item output lengths from an attention mask.'''
     attention_mask = inputs['attention_mask']
     input_lengths = attention_mask.sum(dim=-1).to('cpu')
     if hasattr(model, '_get_feat_extract_output_lengths'):

@@ -146,61 +146,6 @@ def single_batch_to_outputs(audio_arrays, model, model_type):
         model_type)
 
 
-def _raise_spidr_cnn_not_implemented():
-    m = 'audio_batch_to_cnn() is not implemented for SpidR models yet. '
-    m += 'Check whether the convolutional frontend can be called '
-    m += 'directly on the SpidR model.'
-    raise ValueError(m)
-
-
-def single_batch_to_cnn_outputs(audio_arrays, model, model_type):
-    '''Dispatch one prepared batch to the correct CNN-only backend helper.'''
-    if model_type == 'spidr':
-        _raise_spidr_cnn_not_implemented()
-    return hf_batch_helper.audio_batch_to_cnn(audio_arrays, model, model_type)
-
-
-def iter_handle_cnn_batching(filenames, starts=None, ends=None, model=None,
-    gpu=False, batch_size=None):
-    '''Yield CNN-only outputs in input order while batching internally.'''
-    if gpu is True and ends is None and batch_size is None:
-        m = 'ends must be provided when gpu is True to compute batch size'
-        raise ValueError(m)
-    fn = [Path(filename).resolve() for filename in filenames]
-    if len(filenames) == 0: return
-    if starts is None and ends is None: pass
-    elif ends is None and len(fn) == len(starts): pass
-    elif starts is None and len(fn) == len(ends): pass
-    elif len(fn) == len(starts) == len(ends): pass
-    else:
-        raise ValueError('filenames, starts, and ends must have the same length')
-    starts = _check_batch_values(starts, len(filenames), 0.0, 'starts')
-    ends = _check_batch_values(ends, len(filenames), None, 'ends')
-    model = load.prepare_model(model, gpu)
-    model_type = model_registry.model_to_type(model)
-    if model_type == 'spidr':
-        _raise_spidr_cnn_not_implemented()
-    if batch_size is None and gpu is True:
-        durations = _compute_durations(starts, ends)
-        batch_size = compute_embedding_batch_size(durations, model)
-    batch_size = _check_batch_size(batch_size)
-    if not batch_size is None: print(f'batch size: {batch_size}, gpu: {gpu}')
-    else: print(f'no batching, gpu: {gpu}')
-    input_items = zip(filenames, starts, ends)
-    batches = split(input_items, batch_size=batch_size)
-    prefetch_queue = make_audio_queue(batches)
-    max_value = math.ceil(len(filenames) / batch_size) if batch_size else 1
-    print(f'processing batches: {max_value}')
-    for _ in progressbar(range(max_value)):
-        queue_type, queue_value = prefetch_queue.get()
-        if queue_type == 'done': break
-        if queue_type == 'error': raise queue_value
-        audio_arrays = queue_value
-        outputs = single_batch_to_cnn_outputs(audio_arrays, model, model_type)
-        if gpu: torch.cuda.empty_cache()
-        yield from outputs
-
-
 def numpify(outputs):
     '''Convert model outputs to numpy arrays.'''
     if hasattr(outputs, 'extract_features'):
