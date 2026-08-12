@@ -3,6 +3,13 @@ from unittest import mock
 
 import numpy as np
 import torch
+from transformers import HubertConfig
+from transformers import HubertModel
+from transformers import Wav2Vec2Config
+from transformers import Wav2Vec2ForPreTraining
+from transformers import Wav2Vec2Model
+from transformers import WavLMConfig
+from transformers import WavLMModel
 from transformers.modeling_outputs import BaseModelOutput
 
 import to_vector
@@ -15,6 +22,89 @@ from tests.test_helpers import FakeSpidrModel
 
 
 class ToEmbeddingsTests(unittest.TestCase):
+    @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
+    def test_audio_to_cnn_matches_full_inference_extract_features(self,
+        mock_prepare_feature_extractor):
+        model_types = (
+            (Wav2Vec2Config, Wav2Vec2Model),
+            (WavLMConfig, WavLMModel),
+        )
+        input_values = torch.arange(16, dtype=torch.float32).view(1, -1)
+        feature_extractor = mock.Mock(return_value={
+            'input_values': input_values})
+        mock_prepare_feature_extractor.return_value = feature_extractor
+
+        for config_type, model_type in model_types:
+            with self.subTest(model=model_type.__name__):
+                config = self._small_huggingface_config(config_type)
+                model = model_type(config).eval()
+                with torch.no_grad():
+                    full_outputs = model(input_values,
+                        output_hidden_states=True)
+                    raw_features = model.feature_extractor(
+                        input_values).transpose(1, 2)
+
+                normalized = to_vector.audio_to_cnn(np.zeros(16), model=model)
+                raw = to_vector.audio_to_cnn(np.zeros(16), model=model,
+                    normalize=False)
+
+                np.testing.assert_array_equal(normalized,
+                    full_outputs.extract_features.numpy())
+                np.testing.assert_array_equal(raw, raw_features.numpy())
+
+    @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
+    def test_audio_to_cnn_normalizes_hubert_features(self,
+        mock_prepare_feature_extractor):
+        input_values = torch.arange(16, dtype=torch.float32).view(1, -1)
+        feature_extractor = mock.Mock(return_value={
+            'input_values': input_values})
+        mock_prepare_feature_extractor.return_value = feature_extractor
+        model = HubertModel(
+            self._small_huggingface_config(HubertConfig)).eval()
+        with torch.no_grad():
+            raw_features = model.feature_extractor(
+                input_values).transpose(1, 2)
+            expected = model.feature_projection.layer_norm(raw_features)
+
+        normalized = to_vector.audio_to_cnn(np.zeros(16), model=model)
+
+        np.testing.assert_array_equal(normalized, expected.numpy())
+
+    @mock.patch('to_vector.to_embeddings.load.prepare_feature_extractor')
+    def test_audio_to_cnn_normalizes_nested_pretraining_model(self,
+        mock_prepare_feature_extractor):
+        input_values = torch.arange(16, dtype=torch.float32).view(1, -1)
+        feature_extractor = mock.Mock(return_value={
+            'input_values': input_values})
+        mock_prepare_feature_extractor.return_value = feature_extractor
+        config = self._small_huggingface_config(Wav2Vec2Config)
+        model = Wav2Vec2ForPreTraining(config).eval()
+        with torch.no_grad():
+            raw_features = model.wav2vec2.feature_extractor(
+                input_values).transpose(1, 2)
+            expected = model.wav2vec2.feature_projection.layer_norm(
+                raw_features)
+
+        normalized = to_vector.audio_to_cnn(np.zeros(16), model=model)
+
+        np.testing.assert_array_equal(normalized, expected.numpy())
+
+    @mock.patch('to_vector.to_embeddings.audio_to_cnn')
+    @mock.patch('to_vector.to_embeddings.audio.load_audio')
+    def test_filename_to_cnn_forwards_normalize(self, mock_load_audio,
+        mock_audio_to_cnn):
+        audio_array = np.array([1.0, 2.0])
+        cnn_features = np.array([[[3.0, 4.0]]])
+        mock_load_audio.return_value = audio_array
+        mock_audio_to_cnn.return_value = cnn_features
+
+        result = to_vector.filename_to_cnn('example.wav', model='repo/model',
+            gpu=True, normalize=False)
+
+        mock_audio_to_cnn.assert_called_once_with(audio_array, 'repo/model',
+            True, False)
+        self.assertIs(result.extract_features, cnn_features)
+
     @mock.patch('to_vector.hf_batch_helper.load.prepare_feature_extractor')
     def test_hf_batch_helper_splits_huggingface_batch_outputs(
         self, mock_prepare_feature_extractor
@@ -200,6 +290,13 @@ class ToEmbeddingsTests(unittest.TestCase):
         self.assertEqual(outputs.hidden_states[-1].shape, (1, 3, 2))
         self.assertEqual(outputs.extract_features.shape, (1, 3, 2))
         self.assertEqual(outputs.model_type, 'spidr')
+
+    @staticmethod
+    def _small_huggingface_config(config_type):
+        return config_type(conv_dim=(4,), conv_stride=(2,), conv_kernel=(2,),
+            hidden_size=4, num_hidden_layers=1, num_attention_heads=1,
+            intermediate_size=8, num_conv_pos_embedding_groups=1,
+            num_conv_pos_embeddings=2, mask_time_prob=0.0)
 
 
 if __name__ == '__main__':

@@ -85,7 +85,14 @@ Extract convolutional features only:
 
 ```python
 cnn = to_vector.filename_to_cnn("example.wav").extract_features
+raw_cnn = to_vector.filename_to_cnn(
+    "example.wav", normalize=False
+).extract_features
 ```
+
+CNN features are layer-normalized by default, matching `extract_features` from
+full Wav2Vec2 and WavLM inference. Pass `normalize=False` to return the raw
+convolutional output instead.
 
 Extract attention tensors:
 

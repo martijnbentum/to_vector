@@ -60,17 +60,19 @@ def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
         model, gpu, numpify_output, batch_size)
 
 
-def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False):
+def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False,
+    normalize=True):
     '''Convert an audio file to features using a pretrained model.
     audio_filename:  path to the audio file
     start:           segment start time in seconds
     end:             segment end time in seconds
     model:           pretrained model instance or model name
     gpu:             whether to request CUDA
+    normalize:       whether to layer-normalize the CNN features
     '''
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
-    outputs = audio_to_cnn(array, model, gpu) 
+    outputs = audio_to_cnn(array, model, gpu, normalize)
     o = BaseModelOutput(hidden_states=None)
     o.extract_features = outputs
     return o
@@ -131,17 +133,24 @@ def _spidr_audio_to_vector(audio_array, model, numpify_output=True):
     if numpify_output: return batch_helper.numpify(outputs)
     return outputs
 
-def audio_to_cnn(audio, model=None, gpu=False):
+def audio_to_cnn(audio, model=None, gpu=False, normalize=True):
     '''Convert an audio array to features using a pretrained model.
-    audio:         1D audio samples
-    model:         pretrained model instance or model name
-    gpu:           whether to request CUDA
+    audio:      1D audio samples
+    model:      pretrained model instance or model name
+    gpu:        whether to request CUDA
+    normalize:  whether to layer-normalize the CNN features
     '''
     model = load.prepare_model(model, gpu)
-    if model_registry.model_to_type(model) == 'spidr':
+    model_type = model_registry.model_to_type(model)
+    if model_type == 'spidr':
         m = 'audio_to_cnn() is not implemented for SpidR models yet. '
         m += 'Check whether the convolutional frontend can be called '
         m += 'directly on the SpidR model.'
+        raise ValueError(m)
+    if model_type == 'wav2vec2-pretraining': cnn_model = model.wav2vec2
+    else: cnn_model = model
+    if normalize and not hasattr(cnn_model.feature_projection, 'layer_norm'):
+        m = f'{type(model).__name__} does not support CNN feature normalization'
         raise ValueError(m)
     feature_extractor = load.prepare_feature_extractor(model)
     gpu = load.model_is_on_gpu(model)
@@ -151,11 +160,11 @@ def audio_to_cnn(audio, model=None, gpu=False):
     if gpu: inputs = inputs.to('cuda')
     with torch.no_grad():
         input_values = inputs['input_values']
-        if 'ForPreTraining' in str(type(model)):
-            outputs = model.wav2vec2.feature_extractor(input_values)
-        else:
-            outputs = model.feature_extractor(input_values)
+        outputs = cnn_model.feature_extractor(input_values)
+        outputs = outputs.transpose(1, 2)
+        if normalize:
+            outputs = cnn_model.feature_projection.layer_norm(outputs)
     del inputs
     del input_values
-    outputs = outputs.transpose(1, 2).detach().cpu().numpy()
+    outputs = outputs.detach().cpu().numpy()
     return outputs
