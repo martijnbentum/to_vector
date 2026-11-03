@@ -26,6 +26,16 @@ def fail():
     raise ValueError('boom')
 
 
+class UnpicklableError(Exception):
+    def __init__(self):
+        super().__init__('cannot pickle')
+        self.handle = lambda: None
+
+
+def fail_unpicklable():
+    raise UnpicklableError()
+
+
 def die():
     os._exit(3)
 
@@ -37,23 +47,33 @@ def endless():
 
 
 class ShouldSpawnTests(unittest.TestCase):
-    def test_automatic_spawns_only_on_gpu_with_model_reference(self):
-        self.assertTrue(child_process.should_spawn('repo/model', True, None,
-            auto=True))
-        self.assertTrue(child_process.should_spawn(None, True, None,
-            auto=True))
-        self.assertTrue(child_process.should_spawn(Path('model'), True, None,
-            auto=True))
-        self.assertFalse(child_process.should_spawn('repo/model', False, None,
-            auto=True))
-        self.assertFalse(child_process.should_spawn(DummyModel(), True, None,
-            auto=True))
-        self.assertFalse(child_process.should_spawn('repo/model', True, None))
+    def assert_decision(self, expected, message, *args, **kwargs):
+        with mock.patch('builtins.print') as print_mock:
+            result = child_process.should_spawn(*args, **kwargs)
+        self.assertEqual(result, expected)
+        if message is None: print_mock.assert_not_called()
+        else: self.assertIn(message, print_mock.call_args.args[0])
 
-    def test_explicit_spawn_overrides_automatic(self):
-        self.assertTrue(child_process.should_spawn('repo/model', False, True))
-        self.assertFalse(child_process.should_spawn('repo/model', True, False,
-            auto=True))
+    def test_automatic_spawns_only_on_gpu_with_model_reference(self):
+        reason = 'gpu=True and model is a name or path'
+        self.assert_decision(True, reason, 'repo/model', True, None, auto=True)
+        self.assert_decision(True, reason, None, True, None, auto=True)
+        self.assert_decision(True, reason, Path('model'), True, None,
+            auto=True)
+        self.assert_decision(False, 'this process (gpu=False)', 'repo/model',
+            False, None, auto=True)
+        self.assert_decision(False, 'already loaded', DummyModel(), True, None,
+            auto=True)
+
+    def test_spawn_true_requests_child_only_on_gpu(self):
+        self.assert_decision(True, 'child process (spawn=True)', 'repo/model',
+            True, True)
+        self.assert_decision(False, 'this process (gpu=False)', 'repo/model',
+            False, True)
+
+    def test_silent_cases(self):
+        self.assert_decision(False, None, 'repo/model', True, False, auto=True)
+        self.assert_decision(False, None, 'repo/model', True, None)
 
     def test_explicit_spawn_rejects_loaded_model(self):
         with self.assertRaises(ValueError):
@@ -68,9 +88,14 @@ class ChildProcessTests(unittest.TestCase):
     def test_run_in_child_returns_value(self):
         self.assertEqual(child_process.run_in_child(add, 2, b=3), 5)
 
-    def test_child_exception_is_raised_with_traceback(self):
-        with self.assertRaisesRegex(RuntimeError, 'ValueError: boom'):
+    def test_child_exception_keeps_type_and_traceback(self):
+        with self.assertRaisesRegex(ValueError, 'boom') as context:
             child_process.run_in_child(fail)
+        self.assertIn('in fail', str(context.exception.__cause__))
+
+    def test_unpicklable_child_exception_becomes_runtime_error(self):
+        with self.assertRaisesRegex(RuntimeError, 'UnpicklableError'):
+            child_process.run_in_child(fail_unpicklable)
 
     def test_child_that_dies_raises_instead_of_hanging(self):
         with self.assertRaisesRegex(RuntimeError, 'exited with code 3'):

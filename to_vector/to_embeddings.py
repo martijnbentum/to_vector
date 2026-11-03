@@ -20,7 +20,7 @@ def filename_to_vector(audio_filename, start=0.0, end=None, model=None,
     model:           pretrained model instance or model name
     numpify_output:  whether to convert outputs to numpy
     spawn:           True to run in a child process that frees the GPU on
-                     exit (needs a model name or path)
+                     exit (needs gpu=True and a model name or path)
     '''
     if child_process.should_spawn(model, gpu, spawn):
         return child_process.run_in_child(filename_to_vector, audio_filename,
@@ -64,7 +64,8 @@ def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     batch_size:      optional item count per batch
     spawn:           None runs in a child process when gpu is True and model
                      is a name, path or None; the GPU is freed when the
-                     child exits. True forces, False disables.
+                     child exits. True requests it (gpu only), False
+                     disables. Prints whether and why it spawns.
     '''
     if child_process.should_spawn(model, gpu, spawn, auto=True):
         yield from child_process.iter_in_child(iter_filename_batch_to_vector,
@@ -101,7 +102,7 @@ def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True,
     gpu:             whether to request CUDA
     numpify_output:  whether to convert outputs to numpy
     spawn:           True to run in a child process that frees the GPU on
-                     exit (needs a model name or path)
+                     exit (needs gpu=True and a model name or path)
     '''
     if child_process.should_spawn(model, gpu, spawn):
         return child_process.run_in_child(audio_to_vector, audio_array, model,

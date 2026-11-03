@@ -218,7 +218,13 @@ and exits when done, which frees the GPU completely:
 - `filename_to_vector` and `audio_to_vector` do this only with `spawn=True`,
   because a loop over them would reload the model on every call.
 - A loaded model object always runs in the current process.
-- `spawn=False` disables the child process; `spawn=True` forces it.
+- A child process is only used with `gpu=True`, also with `spawn=True`.
+- `spawn=False` disables the child process.
+- Each decision is printed with its reason, e.g. `running in a child process
+  (gpu=True and model is a name or path); the GPU is freed when it exits`.
+  It is silent for `spawn=False` and for single-item calls without `spawn`.
+- Errors raised in the child are re-raised with their original type, with the
+  child's traceback attached as the cause.
 
 ```python
 # runs in a child process; the GPU is free again when the loop ends
