@@ -207,6 +207,29 @@ By default, the convenience functions convert tensor outputs to numpy arrays.
 Passing `gpu=True` requests CUDA, but the library now falls back cleanly to CPU
 when CUDA is not available.
 
+A CUDA context stays allocated until its process exits, so GPU memory cannot
+be fully freed from a long-lived session such as IPython. The embedding
+functions can therefore run in a child process that loads the model itself
+and exits when done, which frees the GPU completely:
+
+- `filename_batch_to_vector` and `iter_filename_batch_to_vector` do this
+  automatically when `gpu=True` and `model` is a name, a path or `None`.
+  Results stream back as each batch finishes.
+- `filename_to_vector` and `audio_to_vector` do this only with `spawn=True`,
+  because a loop over them would reload the model on every call.
+- A loaded model object always runs in the current process.
+- `spawn=False` disables the child process; `spawn=True` forces it.
+
+```python
+# runs in a child process; the GPU is free again when the loop ends
+for outputs in to_vector.iter_filename_batch_to_vector(filenames,
+    starts=starts, ends=ends, model='facebook/wav2vec2-base', gpu=True):
+    ...
+```
+
+Scripts that start a child process must guard their entry point with
+`if __name__ == '__main__':`, because the child re-imports the main module.
+
 ## Notes
 
 - Audio is loaded with `librosa` at `16_000` Hz.

@@ -6,26 +6,32 @@ from transformers.modeling_outputs import BaseModelOutput
 from . import _spidr_util
 from . import audio
 from . import batch_helper
+from . import child_process
 from . import load
 from . import model_registry
 
 
 def filename_to_vector(audio_filename, start=0.0, end=None, model=None,
-    gpu=False, numpify_output=True):
+    gpu=False, numpify_output=True, spawn=None):
     '''Convert an audio file to a vector using a pretrained model.
     audio_filename:  path to the audio file
     start:           segment start time in seconds
     end:             segment end time in seconds
     model:           pretrained model instance or model name
     numpify_output:  whether to convert outputs to numpy
+    spawn:           True to run in a child process that frees the GPU on
+                     exit (needs a model name or path)
     '''
+    if child_process.should_spawn(model, gpu, spawn):
+        return child_process.run_in_child(filename_to_vector, audio_filename,
+            start, end, model, gpu, numpify_output, spawn=False)
     audio_filename = Path(audio_filename).resolve()
     array = audio.load_audio(audio_filename, start, end)
     outputs = audio_to_vector(array, model, gpu, numpify_output)
     return outputs
 
 def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
-    model=None, gpu=False, numpify_output=True, batch_size=None):
+    model=None, gpu=False, numpify_output=True, batch_size=None, spawn=None):
     '''Convert multiple audio files to embeddings.
     audio_filenames: sequence of audio file paths
     starts:          optional sequence of segment starts in seconds
@@ -34,10 +40,11 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     gpu:             whether to request CUDA
     numpify_output:  whether to convert outputs to numpy
     batch_size:      optional item count per batch
+    spawn:           see iter_filename_batch_to_vector
     '''
     outputs = list(iter_filename_batch_to_vector(audio_filenames, starts=starts,
         ends=ends, model=model, gpu=gpu, numpify_output=numpify_output,
-        batch_size=batch_size))
+        batch_size=batch_size, spawn=spawn))
     if len(audio_filenames) != len(outputs):
         m = f'iter_filename_batch_to_vector() returned {len(outputs)} outputs '
         m += f', but expected {len(audio_filenames)} outputs'
@@ -46,7 +53,7 @@ def filename_batch_to_vector(audio_filenames, starts=None, ends=None,
 
 
 def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
-    model=None, gpu=False, numpify_output=True, batch_size=None):
+    model=None, gpu=False, numpify_output=True, batch_size=None, spawn=None):
     '''Yield embeddings for multiple audio files in input order.
     audio_filenames: sequence of audio file paths
     starts:          optional sequence of segment starts in seconds
@@ -55,7 +62,15 @@ def iter_filename_batch_to_vector(audio_filenames, starts=None, ends=None,
     gpu:             whether to request CUDA
     numpify_output:  whether to convert outputs to numpy
     batch_size:      optional item count per batch
+    spawn:           None runs in a child process when gpu is True and model
+                     is a name, path or None; the GPU is freed when the
+                     child exits. True forces, False disables.
     '''
+    if child_process.should_spawn(model, gpu, spawn, auto=True):
+        yield from child_process.iter_in_child(iter_filename_batch_to_vector,
+            audio_filenames, starts, ends, model, gpu, numpify_output,
+            batch_size, spawn=False)
+        return
     yield from batch_helper.iter_handle_batching(audio_filenames, starts, ends,
         model, gpu, numpify_output, batch_size)
 
@@ -78,13 +93,19 @@ def filename_to_cnn(audio_filename, start=0.0, end=None, model=None, gpu=False,
     return o
 
 
-def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True):
+def audio_to_vector(audio_array, model=None, gpu=False, numpify_output=True,
+    spawn=None):
     '''Convert an audio array to a vector using a pretrained model.
     audio_array:     1D audio samples
     model:           pretrained model instance or model name
     gpu:             whether to request CUDA
     numpify_output:  whether to convert outputs to numpy
+    spawn:           True to run in a child process that frees the GPU on
+                     exit (needs a model name or path)
     '''
+    if child_process.should_spawn(model, gpu, spawn):
+        return child_process.run_in_child(audio_to_vector, audio_array, model,
+            gpu, numpify_output, spawn=False)
     model = load.prepare_model(model, gpu)
     model_type = model_registry.model_to_type(model)
     if model_type == 'spidr':
